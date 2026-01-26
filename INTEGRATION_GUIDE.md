@@ -118,9 +118,30 @@ TELEGRAM_ADMIN_CHAT_ID=your-admin-chat-id  # Optional: for error notifications
 ```
 
 **Gmail Setup (for each account):**
-1. Enable 2FA
-2. Generate App Password: https://myaccount.google.com/apppasswords
-3. Use app password (not regular password) for each account's `password` field
+
+1. **Enable IMAP in Gmail:**
+   - Go to Gmail → Settings (gear icon) → "See all settings"
+   - Click "Forwarding and POP/IMAP" tab
+   - Under "IMAP access", select "Enable IMAP"
+   - Click "Save Changes"
+
+2. **Enable 2-Step Verification:**
+   - Go to your Google Account: https://myaccount.google.com/security
+   - Under "How you sign in to Google", click "2-Step Verification"
+   - Follow the setup process (if not already enabled)
+
+3. **Generate App Password:**
+   - Go to: https://myaccount.google.com/apppasswords
+   - Or: Google Account → Security → App passwords
+   - Select "Mail" as the app
+   - Select your device (or "Other" and type "InPost Scraper")
+   - Click "Generate"
+   - Copy the 16-character password (e.g., `abcd efgh ijkl mnop`)
+   - **Important:** Use this App Password (not your regular Gmail password)
+
+4. **Configure in .env:**
+   - Use the App Password in the `password` field
+   - You can remove spaces: `abcdefghijklmnop` or keep them: `abcd efgh ijkl mnop`
 
 **Multiple Accounts Benefits:**
 - ✅ Process emails from multiple InPost accounts
