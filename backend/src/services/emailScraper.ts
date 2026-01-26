@@ -296,6 +296,39 @@ async function processEmail(emailText: string, emailHtml: string, emailAccount?:
 }
 
 /**
+ * Process emails from IMAP search results
+ */
+async function processEmails(imap: Imap, results: number[], emailAccount: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const fetch = imap.fetch(results, { bodies: '' });
+
+    fetch.on('message', (msg, seqno) => {
+      msg.on('body', async (stream) => {
+        const parsed = await simpleParser(stream);
+        const emailText = parsed.text || '';
+        const emailHtml = parsed.html || '';
+
+        try {
+          await processEmail(emailText, emailHtml, emailAccount);
+        } catch (error) {
+          console.error(`[Email Scraper] Error processing email ${seqno} from ${emailAccount}:`, error);
+        }
+      });
+    });
+
+    fetch.once('end', () => {
+      console.log(`[Email Scraper] Finished processing emails for ${emailAccount}`);
+      resolve();
+    });
+
+    fetch.once('error', (err) => {
+      console.error(`[Email Scraper] Fetch error for ${emailAccount}:`, err);
+      reject(err);
+    });
+  });
+}
+
+/**
  * Connect to a single IMAP account and process new emails
  */
 async function checkImapAccount(account: ImapAccountConfig): Promise<void> {
@@ -369,46 +402,13 @@ async function checkImapAccount(account: ImapAccountConfig): Promise<void> {
           }
 
           console.log(`[Email Scraper] Found ${results.length} new email(s) for ${account.user}`);
-          await processEmails(imap, results, account.user);
+          try {
+            await processEmails(imap, results, account.user);
+          } catch (error) {
+            console.error(`[Email Scraper] Error processing emails for ${account.user}:`, error);
+          }
           imap.end();
           resolve();
-        });
-          if (err) {
-            console.error(`[Email Scraper] Search error for ${account.user}:`, err);
-            reject(err);
-            return;
-          }
-
-          if (!results || results.length === 0) {
-            console.log(`[Email Scraper] No new emails found for ${account.user}`);
-            imap.end();
-            resolve();
-            return;
-          }
-
-          console.log(`[Email Scraper] Found ${results.length} new email(s) for ${account.user}`);
-
-          const fetch = imap.fetch(results, { bodies: '' });
-
-          fetch.on('message', (msg, seqno) => {
-            msg.on('body', async (stream) => {
-              const parsed = await simpleParser(stream);
-              const emailText = parsed.text || '';
-              const emailHtml = parsed.html || '';
-
-              try {
-                await processEmail(emailText, emailHtml, account.user);
-              } catch (error) {
-                console.error(`[Email Scraper] Error processing email ${seqno} from ${account.user}:`, error);
-              }
-            });
-          });
-
-          fetch.once('end', () => {
-            console.log(`[Email Scraper] Finished processing emails for ${account.user}`);
-            imap.end();
-            resolve();
-          });
         });
       });
     });
