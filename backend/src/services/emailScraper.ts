@@ -95,14 +95,16 @@ function extractTrackingNumber(text: string): string | null {
   // InPost tracking numbers are typically 24 characters, alphanumeric
   // Common patterns in emails:
   // - "Tracking number: ABC123XYZ..."
+  // - "PARCEL NO. JJD0002233573349014" (UK format with period)
   // - "Parcel number: 123456789012345678901234"
   // - In URLs: /tracking/ABC123XYZ...
   
   const patterns = [
-    /tracking[_\s]*number[:\s]*([A-Z0-9]{24})/i,
-    /parcel[_\s]*number[:\s]*([A-Z0-9]{24})/i,
-    /([A-Z0-9]{24})/g, // Generic 24-char alphanumeric
+    /parcel[_\s.]*no\.?\s*([A-Z0-9]{24})/i, // "PARCEL NO. JJD..." (UK format)
+    /tracking[_\s.]*number[:\s]*([A-Z0-9]{24})/i,
+    /parcel[_\s.]*number[:\s]*([A-Z0-9]{24})/i,
     /\/tracking\/([A-Z0-9]{24})/i,
+    /\b([A-Z0-9]{24})\b/g, // Generic 24-char alphanumeric with word boundaries
   ];
 
   for (const pattern of patterns) {
