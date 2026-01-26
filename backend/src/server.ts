@@ -86,6 +86,8 @@ app.use('/api/tracking', trackingRoutes);
 app.use('/api/analytics', analyticsRoutes);
 // Webhook routes (no authentication required - uses signature verification)
 app.use('/api/webhook', webhookRoutes);
+// Telegram webhook routes
+app.use('/api/telegram', telegramRoutes);
 
 // 404 handler - return JSON instead of blank page
 app.use((req, res) => {
