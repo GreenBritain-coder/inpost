@@ -1,9 +1,11 @@
 FROM node:20-slim
 
-# Install Puppeteer dependencies
+# Install Puppeteer dependencies and build tools (needed for bcrypt)
 RUN apt-get update && apt-get install -y \
     chromium \
     chromium-sandbox \
+    build-essential \
+    python3 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
