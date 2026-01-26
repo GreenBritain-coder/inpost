@@ -89,22 +89,27 @@ function getImapAccounts(): ImapAccountConfig[] {
 
 /**
  * Extract tracking number from InPost email
- * InPost emails typically contain tracking numbers in format: 24 characters (alphanumeric)
+ * InPost emails contain tracking numbers in various formats:
+ * - UK format: 15-18 characters (e.g., JJD0002233573349014, MD000000867865453)
+ * - EU format: 24 characters (alphanumeric)
  */
 function extractTrackingNumber(text: string): string | null {
-  // InPost tracking numbers are typically 24 characters, alphanumeric
+  // InPost tracking numbers vary by region:
+  // - UK: 15-18 characters (MD/JJD prefix common)
+  // - EU: 24 characters
   // Common patterns in emails:
   // - "Tracking number: ABC123XYZ..."
-  // - "PARCEL NO. JJD0002233573349014" (UK format with period)
-  // - "Parcel number: 123456789012345678901234"
+  // - "PARCEL NO. JJD0002233573349014" (UK format)
+  // - "Parcel number MD000000867865453"
   // - In URLs: /tracking/ABC123XYZ...
   
   const patterns = [
-    /parcel[_\s.]*no\.?\s*([A-Z0-9]{24})/i, // "PARCEL NO. JJD..." (UK format)
-    /tracking[_\s.]*number[:\s]*([A-Z0-9]{24})/i,
-    /parcel[_\s.]*number[:\s]*([A-Z0-9]{24})/i,
-    /\/tracking\/([A-Z0-9]{24})/i,
-    /\b([A-Z0-9]{24})\b/g, // Generic 24-char alphanumeric with word boundaries
+    /parcel[_\s.]*no\.?\s*([A-Z]{2,3}[0-9]{12,21})/i, // "PARCEL NO. JJD0002233573349014" (UK format)
+    /parcel[_\s.]*number[:\s]*([A-Z]{2,3}[0-9]{12,21})/i, // "Parcel number MD000000867865453"
+    /tracking[_\s.]*number[:\s]*([A-Z0-9]{12,24})/i, // "Tracking number: ..."
+    /\/tracking\/([A-Z0-9]{12,24})/i, // URL format
+    /\b([A-Z]{2,3}[0-9]{12,21})\b/g, // Generic: 2-3 letters + 12-21 digits (covers UK format)
+    /\b([A-Z0-9]{20,24})\b/g, // Generic: 20-24 chars (covers EU format, avoids false positives)
   ];
 
   for (const pattern of patterns) {

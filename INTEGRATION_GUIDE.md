@@ -13,7 +13,7 @@ When creating an InPost shipment, store:
 ```typescript
 POST /api/tracking/numbers
 {
-  "tracking_number": "ABC123XYZ...",  // 24-char InPost tracking number
+  "tracking_number": "ABC123XYZ...",  // InPost tracking number (UK: 15-18 chars, EU: 24 chars)
   "user_id": 123,                     // Your user ID
   "telegram_chat_id": 987654321,      // Telegram chat ID
   "email_used": "user@example.com",   // Email used for InPost
@@ -37,8 +37,9 @@ POST /api/tracking/numbers
 - Extracts: `tracking_number`, `pickup_code`, `locker_id`
 
 **Extraction Patterns:**
-- Tracking number: 24-character alphanumeric
-- Pickup code: 6-digit code
+- Tracking number: Alphanumeric (UK: 15-18 chars like JJD0002233573349014, MD000000867865453; EU: 24 chars)
+- Pickup code: 6-digit code (e.g., 123456)
+- Send code: 9-digit code with spaces (e.g., 344 924 512) for drop-off
 - Locker ID: Alphanumeric locker identifier
 
 ### 3️⃣ Matching Logic (CRITICAL)
@@ -228,17 +229,23 @@ WHERE tracking_number = 'ABC123XYZ...';
 
 The scraper looks for these patterns in InPost emails:
 
-**Tracking Number:**
+**Tracking Number (UK Format: 15-18 chars, EU Format: 24 chars):**
+- `PARCEL NO. JJD0002233573349014` (UK format)
+- `Parcel number MD000000867865453` (UK format)
 - `tracking number: ABC123XYZ...`
-- `parcel number: ABC123XYZ...`
 - `/tracking/ABC123XYZ...`
-- Any 24-character alphanumeric string
+- Generic patterns for 12-24 character alphanumeric strings
 
-**Pickup Code:**
+**Pickup Code (6 digits):**
 - `pickup code: 123456`
 - `code: 123456`
 - `your code: 123456`
 - Any 6-digit number
+
+**Send Code (9 digits for drop-off):**
+- `code instead 344 924 512`
+- `send code: 344924512`
+- Any 9-digit code with or without spaces
 
 **Locker ID:**
 - `locker: ABC123`
@@ -341,5 +348,5 @@ curl -X POST "https://api.telegram.org/bot<TOKEN>/sendMessage" \
 
 **No matches found:**
 - Verify tracking number was created with user/telegram info
-- Check tracking number format matches (24 chars, uppercase)
+- Check tracking number format matches (UK: 15-18 chars, EU: 24 chars, uppercase)
 - Verify email extraction patterns match your InPost email format
