@@ -313,8 +313,8 @@ async function checkImapAccount(account: ImapAccountConfig): Promise<void> {
         }
 
         // Search for unread emails from InPost
-        // Adjust search criteria based on your InPost email sender
-        imap.search(['UNSEEN', ['FROM', 'inpost.pl']], async (err, results) => {
+        // Support multiple InPost email domains: inpost.pl, inpost.co.uk, etc.
+        imap.search(['UNSEEN', ['OR', ['FROM', 'inpost.pl'], ['FROM', 'inpost.co.uk']]], async (err, results) => {
           if (err) {
             console.error(`[Email Scraper] Search error for ${account.user}:`, err);
             reject(err);
