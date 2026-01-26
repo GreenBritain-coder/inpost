@@ -33,14 +33,20 @@ export interface TrackingNumberWithBox extends TrackingNumber {
 
 export async function createTrackingNumber(
   trackingNumber: string,
-  boxId: number | null = null
+  boxId: number | null = null,
+  userId: number | null = null,
+  telegramChatId: bigint | number | null = null,
+  emailUsed: string | null = null
 ): Promise<TrackingNumber> {
   const result = await pool.query(
-    `INSERT INTO tracking_numbers (tracking_number, box_id, current_status)
-     VALUES ($1, $2, 'not_scanned')
-     ON CONFLICT (tracking_number) DO NOTHING
+    `INSERT INTO tracking_numbers (tracking_number, box_id, current_status, user_id, telegram_chat_id, email_used)
+     VALUES ($1, $2, 'not_scanned', $3, $4, $5)
+     ON CONFLICT (tracking_number) DO UPDATE SET
+       user_id = COALESCE(EXCLUDED.user_id, tracking_numbers.user_id),
+       telegram_chat_id = COALESCE(EXCLUDED.telegram_chat_id, tracking_numbers.telegram_chat_id),
+       email_used = COALESCE(EXCLUDED.email_used, tracking_numbers.email_used)
      RETURNING *`,
-    [trackingNumber, boxId]
+    [trackingNumber, boxId, userId, telegramChatId ? BigInt(telegramChatId).toString() : null, emailUsed]
   );
   
   if (result.rows.length === 0) {

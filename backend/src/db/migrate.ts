@@ -217,6 +217,43 @@ async function migrate() {
       )
     `);
 
+    // Add email/telegram integration fields (if not exist)
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        -- Add user/telegram fields for shipment creation
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='user_id') THEN
+          ALTER TABLE tracking_numbers ADD COLUMN user_id INTEGER;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='telegram_chat_id') THEN
+          ALTER TABLE tracking_numbers ADD COLUMN telegram_chat_id BIGINT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='email_used') THEN
+          ALTER TABLE tracking_numbers ADD COLUMN email_used VARCHAR(255);
+        END IF;
+        
+        -- Add pickup code and locker fields from email extraction
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='pickup_code') THEN
+          ALTER TABLE tracking_numbers ADD COLUMN pickup_code VARCHAR(10);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='locker_id') THEN
+          ALTER TABLE tracking_numbers ADD COLUMN locker_id VARCHAR(50);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='pickup_code_sent_at') THEN
+          ALTER TABLE tracking_numbers ADD COLUMN pickup_code_sent_at TIMESTAMP;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='email_received_at') THEN
+          ALTER TABLE tracking_numbers ADD COLUMN email_received_at TIMESTAMP;
+        END IF;
+      END $$;
+    `);
+
+    // Create indexes for email matching
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_tracking_number_lookup ON tracking_numbers(tracking_number);
+      CREATE INDEX IF NOT EXISTS idx_tracking_number_email ON tracking_numbers(tracking_number) WHERE email_used IS NOT NULL;
+    `);
+
     // Create indexes
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_tracking_numbers_box_id ON tracking_numbers(box_id);

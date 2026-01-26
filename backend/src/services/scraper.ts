@@ -290,7 +290,7 @@ export async function checkInPostStatus(trackingNumber: string): Promise<{
             headers: {
               'Accept': 'application/json',
               'Content-Type': 'application/json',
-              'Tracking-Api-Key': TRACKINGMORE_API_KEY,
+              'Trackingmore-Api-Key': TRACKINGMORE_API_KEY,
             },
             timeout: 30000,
           }
@@ -414,7 +414,7 @@ export async function checkInPostStatus(trackingNumber: string): Promise<{
               tracking_numbers: cleanTrackingNumber,
             },
             headers: {
-              'Tracking-Api-Key': TRACKINGMORE_API_KEY,
+              'Trackingmore-Api-Key': TRACKINGMORE_API_KEY,
               'Content-Type': 'application/json',
             },
             timeout: 30000,

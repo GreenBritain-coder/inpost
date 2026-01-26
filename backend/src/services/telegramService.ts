@@ -1,0 +1,67 @@
+import axios from 'axios';
+
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
+
+/**
+ * Send pickup code to user via Telegram
+ */
+export async function sendPickupCodeToTelegram(
+  chatId: bigint | number,
+  trackingNumber: string,
+  pickupCode: string,
+  lockerId: string | null
+): Promise<boolean> {
+  if (!TELEGRAM_BOT_TOKEN) {
+    console.error('[Telegram] Bot token not configured');
+    return false;
+  }
+
+  const message = `📦 Your InPost parcel is ready for pickup!\n\n` +
+    `Tracking: ${trackingNumber}\n` +
+    `Pickup Code: ${pickupCode}\n` +
+    (lockerId ? `Locker: ${lockerId}\n` : '') +
+    `\nYou have 48 hours to collect your parcel.`;
+
+  try {
+    const response = await axios.post(`${TELEGRAM_API_URL}/sendMessage`, {
+      chat_id: chatId,
+      text: message,
+      parse_mode: 'HTML',
+    });
+
+    if (response.data.ok) {
+      console.log(`[Telegram] ✅ Sent pickup code to chat ${chatId} for ${trackingNumber}`);
+      return true;
+    } else {
+      console.error(`[Telegram] Failed to send message:`, response.data);
+      return false;
+    }
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      console.error(`[Telegram] Error sending message to ${chatId}:`, error.response?.data || error.message);
+    } else {
+      console.error(`[Telegram] Unknown error:`, error);
+    }
+    return false;
+  }
+}
+
+/**
+ * Send error notification to admin (optional)
+ */
+export async function sendAdminNotification(message: string): Promise<void> {
+  const adminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
+  if (!adminChatId || !TELEGRAM_BOT_TOKEN) {
+    return;
+  }
+
+  try {
+    await axios.post(`${TELEGRAM_API_URL}/sendMessage`, {
+      chat_id: adminChatId,
+      text: `⚠️ ${message}`,
+    });
+  } catch (error) {
+    console.error('[Telegram] Failed to send admin notification:', error);
+  }
+}

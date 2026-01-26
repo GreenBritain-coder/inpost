@@ -534,6 +534,9 @@ router.post(
   [
     body('tracking_number').notEmpty().trim(),
     body('box_id').optional().isInt(),
+    body('user_id').optional().isInt(),
+    body('telegram_chat_id').optional().isInt().toInt(),
+    body('email_used').optional().isEmail().normalizeEmail(),
   ],
   async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
@@ -542,7 +545,7 @@ router.post(
     }
 
     try {
-      const { tracking_number, box_id } = req.body;
+      const { tracking_number, box_id, user_id, telegram_chat_id, email_used } = req.body;
       
       // Validate box exists if provided
       if (box_id) {
@@ -552,7 +555,13 @@ router.post(
         }
       }
       
-      const tracking = await createTrackingNumber(tracking_number, box_id || null);
+      const tracking = await createTrackingNumber(
+        tracking_number, 
+        box_id || null,
+        user_id || null,
+        telegram_chat_id || null,
+        email_used || null
+      );
       res.status(201).json(tracking);
     } catch (error) {
       console.error('Error creating tracking number:', error);

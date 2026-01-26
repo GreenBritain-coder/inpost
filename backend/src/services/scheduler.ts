@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { getAllTrackingNumbers, updateTrackingStatus, saveTrackingEvents } from '../models/tracking';
 import { checkInPostStatus } from './scraper';
+import { checkInPostEmails } from './emailScraper';
 import { pool } from '../db/connection';
 
 let isRunning = false;
@@ -189,6 +190,16 @@ export function startScheduler() {
   // Run every 4 hours (at the top of every 4th hour: 0:00, 4:00, 8:00, 12:00, 16:00, 20:00)
   cron.schedule('0 */4 * * *', () => {
     updateAllTrackingStatuses();
+  });
+  
+  // Check InPost emails every 5 minutes for pickup codes
+  cron.schedule('*/5 * * * *', async () => {
+    try {
+      console.log('[Scheduler] Checking InPost emails for pickup codes...');
+      await checkInPostEmails();
+    } catch (error) {
+      console.error('[Scheduler] Error checking emails:', error);
+    }
   });
   
   // Run cleanup daily at 2 AM
