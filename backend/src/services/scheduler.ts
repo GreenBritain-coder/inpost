@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { getAllTrackingNumbers, updateTrackingStatus, saveTrackingEvents } from '../models/tracking';
 import { checkInPostStatus } from './scraper';
 import { checkInPostEmails } from './emailScraper';
+import { startTelegramPolling } from '../routes/telegram';
 import { pool } from '../db/connection';
 
 let isRunning = false;
@@ -212,5 +213,10 @@ export function startScheduler() {
   console.log('Cleanup job scheduled to run daily at 2 AM.');
   // Run on startup to get initial status
   updateAllTrackingStatuses();
+  
+  // Start Telegram bot polling (if token is configured)
+  startTelegramPolling().catch((error) => {
+    console.error('[Scheduler] Failed to start Telegram polling:', error);
+  });
 }
 
