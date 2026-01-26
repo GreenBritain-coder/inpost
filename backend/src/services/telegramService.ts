@@ -48,6 +48,48 @@ export async function sendPickupCodeToTelegram(
 }
 
 /**
+ * Send send/drop-off code to user via Telegram
+ */
+export async function sendSendCodeToTelegram(
+  chatId: bigint | number,
+  trackingNumber: string,
+  sendCode: string
+): Promise<boolean> {
+  if (!TELEGRAM_BOT_TOKEN) {
+    console.error('[Telegram] Bot token not configured');
+    return false;
+  }
+
+  const message = `📮 Your InPost drop-off code is ready!\n\n` +
+    `Tracking: ${trackingNumber}\n` +
+    `Drop-off Code: ${sendCode}\n` +
+    `\nUse this code to drop off your parcel at any InPost locker or shop.`;
+
+  try {
+    const response = await axios.post(`${TELEGRAM_API_URL}/sendMessage`, {
+      chat_id: chatId,
+      text: message,
+      parse_mode: 'HTML',
+    });
+
+    if (response.data.ok) {
+      console.log(`[Telegram] ✅ Sent send code to chat ${chatId} for ${trackingNumber}`);
+      return true;
+    } else {
+      console.error(`[Telegram] Failed to send message:`, response.data);
+      return false;
+    }
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      console.error(`[Telegram] Error sending message to ${chatId}:`, error.response?.data || error.message);
+    } else {
+      console.error(`[Telegram] Unknown error:`, error);
+    }
+    return false;
+  }
+}
+
+/**
  * Send error notification to admin (optional)
  */
 export async function sendAdminNotification(message: string): Promise<void> {

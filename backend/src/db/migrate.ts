@@ -245,6 +245,17 @@ async function migrate() {
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='email_received_at') THEN
           ALTER TABLE tracking_numbers ADD COLUMN email_received_at TIMESTAMP;
         END IF;
+        
+        -- Add send code fields from sender/drop-off email extraction
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='send_code') THEN
+          ALTER TABLE tracking_numbers ADD COLUMN send_code VARCHAR(15);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='send_code_sent_at') THEN
+          ALTER TABLE tracking_numbers ADD COLUMN send_code_sent_at TIMESTAMP;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='send_email_received_at') THEN
+          ALTER TABLE tracking_numbers ADD COLUMN send_email_received_at TIMESTAMP;
+        END IF;
       END $$;
     `);
 

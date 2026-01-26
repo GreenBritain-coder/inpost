@@ -144,6 +144,36 @@ function extractPickupCode(text: string): string | null {
 }
 
 /**
+ * Extract send code from InPost email (for drop-off)
+ * Send codes are typically 9 digits, may have spaces
+ * Format: "344 924 512" or "344924512"
+ */
+function extractSendCode(text: string): string | null {
+  // InPost send codes are 9 digits, possibly with spaces
+  // Common patterns:
+  // - "Enter this code instead344 924 512"
+  // - "code instead 344 924 512"
+  // - "QR code not working?Enter this code instead344 924 512"
+  
+  const patterns = [
+    /code\s*instead\s*(\d{3}\s*\d{3}\s*\d{3})/i,
+    /send[_\s]*code[:\s]*(\d{3}\s*\d{3}\s*\d{3})/i,
+    /drop[_\s]*off[_\s]*code[:\s]*(\d{3}\s*\d{3}\s*\d{3})/i,
+    /(\d{3}\s+\d{3}\s+\d{3})/g, // Generic 9-digit code with spaces
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      // Remove spaces for consistent storage
+      return match[1].replace(/\s+/g, '');
+    }
+  }
+
+  return null;
+}
+
+/**
  * Extract locker ID from InPost email
  * Locker IDs are typically alphanumeric codes
  */
@@ -173,16 +203,17 @@ function extractLockerId(text: string): string | null {
 /**
  * Match tracking number to shipment and return user info
  * Returns exactly 1 match, or null if no match or multiple matches
- * Also checks if pickup code was already sent to prevent duplicates
+ * Also checks if codes were already sent to prevent duplicates
  */
 async function matchTrackingNumber(trackingNumber: string): Promise<{
   user_id: number;
   telegram_chat_id: bigint;
   tracking_id: number;
   pickup_code_sent_at: Date | null;
+  send_code_sent_at: Date | null;
 } | null> {
   const result = await pool.query(
-    `SELECT id, user_id, telegram_chat_id, pickup_code_sent_at
+    `SELECT id, user_id, telegram_chat_id, pickup_code_sent_at, send_code_sent_at
      FROM tracking_numbers 
      WHERE tracking_number = $1 
      AND user_id IS NOT NULL 
@@ -207,6 +238,7 @@ async function matchTrackingNumber(trackingNumber: string): Promise<{
     user_id: result.rows[0].user_id,
     telegram_chat_id: BigInt(result.rows[0].telegram_chat_id),
     pickup_code_sent_at: result.rows[0].pickup_code_sent_at,
+    send_code_sent_at: result.rows[0].send_code_sent_at,
   };
 }
 
@@ -235,6 +267,34 @@ async function markPickupCodeSent(trackingId: number): Promise<void> {
   await pool.query(
     `UPDATE tracking_numbers 
      SET pickup_code_sent_at = CURRENT_TIMESTAMP 
+     WHERE id = $1`,
+    [trackingId]
+  );
+}
+
+/**
+ * Update tracking number with send code (for drop-off)
+ */
+async function updateTrackingWithSendCode(
+  trackingId: number,
+  sendCode: string
+): Promise<void> {
+  await pool.query(
+    `UPDATE tracking_numbers 
+     SET send_code = $1,
+         send_email_received_at = CURRENT_TIMESTAMP
+     WHERE id = $2`,
+    [sendCode, trackingId]
+  );
+}
+
+/**
+ * Mark send code as sent
+ */
+async function markSendCodeSent(trackingId: number): Promise<void> {
+  await pool.query(
+    `UPDATE tracking_numbers 
+     SET send_code_sent_at = CURRENT_TIMESTAMP 
      WHERE id = $1`,
     [trackingId]
   );
@@ -273,45 +333,82 @@ async function processEmail(emailText: string, emailHtml: string, emailSubject: 
     return false;
   }
 
-  // Check if pickup code was already sent (prevent duplicates)
-  if (match.pickup_code_sent_at) {
-    console.log(`[Email Scraper] Pickup code already sent for ${trackingNumber} at ${match.pickup_code_sent_at}, skipping duplicate`);
-    return true; // Return true so email can be marked as read (already processed)
-  }
-
-  // Extract pickup code and locker ID
+  // Extract both pickup code (6-digit) and send code (9-digit)
   const pickupCode = extractPickupCode(fullText);
+  const sendCode = extractSendCode(fullText);
   const lockerId = extractLockerId(fullText);
 
-  if (!pickupCode) {
-    console.warn(`[Email Scraper] No pickup code found for tracking number: ${trackingNumber}`);
+  let processedSomething = false;
+
+  // Process send code (drop-off email)
+  if (sendCode) {
+    console.log(`[Email Scraper] Found SEND code for ${trackingNumber}: ${sendCode}`);
+    
+    if (match.send_code_sent_at) {
+      console.log(`[Email Scraper] Send code already sent for ${trackingNumber} at ${match.send_code_sent_at}, skipping duplicate`);
+    } else {
+      // Update database with send code
+      await updateTrackingWithSendCode(match.tracking_id, sendCode);
+
+      // Send to Telegram
+      const { sendSendCodeToTelegram } = await import('./telegramService');
+      const sent = await sendSendCodeToTelegram(
+        match.telegram_chat_id, 
+        trackingNumber, 
+        sendCode
+      );
+      
+      if (sent) {
+        await markSendCodeSent(match.tracking_id);
+        console.log(`[Email Scraper] ✅ Successfully processed SEND code for ${trackingNumber}`);
+        processedSomething = true;
+      } else {
+        console.error(`[Email Scraper] Failed to send Telegram message for send code ${trackingNumber}`);
+      }
+    }
+  }
+
+  // Process pickup code (collection email)
+  if (pickupCode) {
+    console.log(`[Email Scraper] Found PICKUP code for ${trackingNumber}: ${pickupCode}`);
+    
+    if (match.pickup_code_sent_at) {
+      console.log(`[Email Scraper] Pickup code already sent for ${trackingNumber} at ${match.pickup_code_sent_at}, skipping duplicate`);
+    } else {
+      // Update database with pickup code
+      await updateTrackingWithPickupCode(match.tracking_id, pickupCode, lockerId);
+
+      // Send to Telegram
+      const { sendPickupCodeToTelegram } = await import('./telegramService');
+      const sent = await sendPickupCodeToTelegram(
+        match.telegram_chat_id, 
+        trackingNumber, 
+        pickupCode, 
+        lockerId
+      );
+      
+      if (sent) {
+        await markPickupCodeSent(match.tracking_id);
+        console.log(`[Email Scraper] ✅ Successfully processed PICKUP code for ${trackingNumber}`);
+        processedSomething = true;
+      } else {
+        console.error(`[Email Scraper] Failed to send Telegram message for pickup code ${trackingNumber}`);
+      }
+    }
+  }
+
+  // If no codes found at all
+  if (!sendCode && !pickupCode) {
+    console.warn(`[Email Scraper] No send code or pickup code found for tracking number: ${trackingNumber}`);
     return false;
   }
 
-  console.log(`[Email Scraper] Extracted - Tracking: ${trackingNumber}, Code: ${pickupCode}, Locker: ${lockerId || 'N/A'}`);
-
-  // Update database with pickup code
-  await updateTrackingWithPickupCode(match.tracking_id, pickupCode, lockerId);
-
-  // Send to Telegram
-  const { sendPickupCodeToTelegram } = await import('./telegramService');
-  const sent = await sendPickupCodeToTelegram(
-    match.telegram_chat_id, 
-    trackingNumber, 
-    pickupCode, 
-    lockerId
-  );
-  
-  if (!sent) {
-    console.error(`[Email Scraper] Failed to send Telegram message for ${trackingNumber}`);
-    return false; // Don't mark as sent if Telegram failed
+  // If we already sent codes before, mark as processed (don't leave unread)
+  if (match.send_code_sent_at || match.pickup_code_sent_at) {
+    return true;
   }
-  
-  // Mark as sent
-  await markPickupCodeSent(match.tracking_id);
 
-  console.log(`[Email Scraper] ✅ Successfully processed email for ${trackingNumber}`);
-  return true;
+  return processedSomething;
 }
 
 /**
@@ -508,6 +605,7 @@ export async function checkInPostEmails(): Promise<void> {
 export {
   extractTrackingNumber,
   extractPickupCode,
+  extractSendCode,
   extractLockerId,
   matchTrackingNumber,
 };
