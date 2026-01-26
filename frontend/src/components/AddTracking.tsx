@@ -11,6 +11,9 @@ export default function AddTracking() {
   const [newBoxParentId, setNewBoxParentId] = useState<number | null>(null);
   const [showNewBox, setShowNewBox] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState('');
+  const [userId, setUserId] = useState('');
+  const [telegramChatId, setTelegramChatId] = useState('');
+  const [emailUsed, setEmailUsed] = useState('');
   const [bulkTrackingNumbers, setBulkTrackingNumbers] = useState('');
   const [bulkCustomTimestamp, setBulkCustomTimestamp] = useState('');
   const [mode, setMode] = useState<'single' | 'bulk'>('single');
@@ -130,8 +133,17 @@ export default function AddTracking() {
     setMessage(null);
 
     try {
-      await api.createTrackingNumber(trackingNumber.trim(), selectedBox || undefined);
+      await api.createTrackingNumber(
+        trackingNumber.trim(), 
+        selectedBox || undefined,
+        userId ? parseInt(userId) : undefined,
+        telegramChatId ? parseInt(telegramChatId) : undefined,
+        emailUsed.trim() || undefined
+      );
       setTrackingNumber('');
+      setUserId('');
+      setTelegramChatId('');
+      setEmailUsed('');
       setMessage({ type: 'success', text: 'Tracking number added successfully' });
     } catch (error: any) {
       setMessage({
@@ -393,7 +405,7 @@ export default function AddTracking() {
       {mode === 'single' ? (
         <form onSubmit={handleSingleSubmit} className="tracking-form">
           <div className="form-group">
-            <label htmlFor="tracking-number">Tracking Number</label>
+            <label htmlFor="tracking-number">Tracking Number *</label>
             <input
               type="text"
               id="tracking-number"
@@ -402,6 +414,39 @@ export default function AddTracking() {
               placeholder="Enter tracking number"
               required
             />
+          </div>
+          <div className="form-group">
+            <label htmlFor="user-id">User ID (optional)</label>
+            <input
+              type="number"
+              id="user-id"
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              placeholder="e.g., 1"
+            />
+            <small>Internal user ID for this tracking number</small>
+          </div>
+          <div className="form-group">
+            <label htmlFor="telegram-chat-id">Telegram Chat ID (optional)</label>
+            <input
+              type="number"
+              id="telegram-chat-id"
+              value={telegramChatId}
+              onChange={(e) => setTelegramChatId(e.target.value)}
+              placeholder="e.g., 7744334263"
+            />
+            <small>Recipient's Telegram chat ID to receive pickup codes</small>
+          </div>
+          <div className="form-group">
+            <label htmlFor="email-used">Email Used (optional)</label>
+            <input
+              type="email"
+              id="email-used"
+              value={emailUsed}
+              onChange={(e) => setEmailUsed(e.target.value)}
+              placeholder="e.g., swarnes@gmail.com"
+            />
+            <small>Email address used when creating the InPost shipment</small>
           </div>
           <button type="submit" disabled={loading} className="submit-btn">
             {loading ? 'Adding...' : 'Add Tracking Number'}
