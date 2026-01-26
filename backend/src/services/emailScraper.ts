@@ -317,19 +317,62 @@ async function checkImapAccount(account: ImapAccountConfig): Promise<void> {
         // Search for unread emails OR emails from last 24 hours (to catch emails that were already read)
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
-        const dateStr = yesterday.toISOString().split('T')[0].replace(/-/g, '-');
         
+        // IMAP search: unread emails from InPost OR emails from last 24 hours from InPost
+        // Use separate searches and combine, or use a more flexible approach
+        // For node-imap, we need to structure the OR correctly
         imap.search([
-          ['OR', 
-            ['UNSEEN'], 
-            ['SINCE', yesterday]
-          ],
+          'UNSEEN',
           ['OR', 
             ['FROM', 'inpost.pl'], 
             ['FROM', 'inpost.co.uk'],
             ['FROM', 'inpost@inpost.co.uk']
           ]
         ], async (err, results) => {
+          if (err) {
+            console.error(`[Email Scraper] Search error for ${account.user}:`, err);
+            reject(err);
+            return;
+          }
+
+          // If no unread emails found, also check emails from last 24 hours
+          if (!results || results.length === 0) {
+            console.log(`[Email Scraper] No unread emails found for ${account.user}, checking last 24 hours...`);
+            imap.search([
+              ['SINCE', yesterday],
+              ['OR', 
+                ['FROM', 'inpost.pl'], 
+                ['FROM', 'inpost.co.uk'],
+                ['FROM', 'inpost@inpost.co.uk']
+              ]
+            ], async (err2, results2) => {
+              if (err2) {
+                console.error(`[Email Scraper] Search error (24h) for ${account.user}:`, err2);
+                imap.end();
+                resolve();
+                return;
+              }
+              
+              if (!results2 || results2.length === 0) {
+                console.log(`[Email Scraper] No new emails found for ${account.user}`);
+                imap.end();
+                resolve();
+                return;
+              }
+
+              console.log(`[Email Scraper] Found ${results2.length} email(s) from last 24 hours for ${account.user}`);
+              await processEmails(imap, results2, account.user);
+              imap.end();
+              resolve();
+            });
+            return;
+          }
+
+          console.log(`[Email Scraper] Found ${results.length} new email(s) for ${account.user}`);
+          await processEmails(imap, results, account.user);
+          imap.end();
+          resolve();
+        });
           if (err) {
             console.error(`[Email Scraper] Search error for ${account.user}:`, err);
             reject(err);
