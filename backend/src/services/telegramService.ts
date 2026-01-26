@@ -53,7 +53,8 @@ export async function sendPickupCodeToTelegram(
 export async function sendSendCodeToTelegram(
   chatId: bigint | number,
   trackingNumber: string,
-  sendCode: string
+  sendCode: string,
+  recipientName?: string | null
 ): Promise<boolean> {
   if (!TELEGRAM_BOT_TOKEN) {
     console.error('[Telegram] Bot token not configured');
@@ -61,6 +62,7 @@ export async function sendSendCodeToTelegram(
   }
 
   const message = `📮 Your InPost drop-off code is ready!\n\n` +
+    (recipientName ? `To: ${recipientName}\n` : '') +
     `Tracking: ${trackingNumber}\n` +
     `Drop-off Code: ${sendCode}\n` +
     `\nUse this code to drop off your parcel at any InPost locker or shop.`;

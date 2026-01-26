@@ -256,6 +256,11 @@ async function migrate() {
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='send_email_received_at') THEN
           ALTER TABLE tracking_numbers ADD COLUMN send_email_received_at TIMESTAMP;
         END IF;
+        
+        -- Add recipient name from sender email
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='recipient_name') THEN
+          ALTER TABLE tracking_numbers ADD COLUMN recipient_name VARCHAR(255);
+        END IF;
       END $$;
     `);
 

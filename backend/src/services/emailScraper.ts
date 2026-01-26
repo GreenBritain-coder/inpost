@@ -201,6 +201,31 @@ function extractLockerId(text: string): string | null {
 }
 
 /**
+ * Extract recipient name from InPost email
+ * Format: "TO: Name" or "TO:Name"
+ */
+function extractRecipientName(text: string): string | null {
+  // InPost emails show recipient as "TO: Name"
+  // Common patterns:
+  // - "TO: Katie Harvey"
+  // - "TO:John Doe"
+  
+  const patterns = [
+    /TO:\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i,  // "TO: Katie Harvey"
+    /recipient[:\s]*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i,  // "Recipient: Katie Harvey"
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+  }
+
+  return null;
+}
+
+/**
  * Match tracking number to shipment and return user info
  * Returns exactly 1 match, or null if no match or multiple matches
  * Also checks if codes were already sent to prevent duplicates
@@ -277,14 +302,16 @@ async function markPickupCodeSent(trackingId: number): Promise<void> {
  */
 async function updateTrackingWithSendCode(
   trackingId: number,
-  sendCode: string
+  sendCode: string,
+  recipientName: string | null
 ): Promise<void> {
   await pool.query(
     `UPDATE tracking_numbers 
      SET send_code = $1,
+         recipient_name = $2,
          send_email_received_at = CURRENT_TIMESTAMP
-     WHERE id = $2`,
-    [sendCode, trackingId]
+     WHERE id = $3`,
+    [sendCode, recipientName, trackingId]
   );
 }
 
@@ -337,25 +364,30 @@ async function processEmail(emailText: string, emailHtml: string, emailSubject: 
   const pickupCode = extractPickupCode(fullText);
   const sendCode = extractSendCode(fullText);
   const lockerId = extractLockerId(fullText);
+  const recipientName = extractRecipientName(fullText);
 
   let processedSomething = false;
 
   // Process send code (drop-off email)
   if (sendCode) {
     console.log(`[Email Scraper] Found SEND code for ${trackingNumber}: ${sendCode}`);
+    if (recipientName) {
+      console.log(`[Email Scraper] Found recipient name: ${recipientName}`);
+    }
     
     if (match.send_code_sent_at) {
       console.log(`[Email Scraper] Send code already sent for ${trackingNumber} at ${match.send_code_sent_at}, skipping duplicate`);
     } else {
-      // Update database with send code
-      await updateTrackingWithSendCode(match.tracking_id, sendCode);
+      // Update database with send code and recipient name
+      await updateTrackingWithSendCode(match.tracking_id, sendCode, recipientName);
 
       // Send to Telegram
       const { sendSendCodeToTelegram } = await import('./telegramService');
       const sent = await sendSendCodeToTelegram(
         match.telegram_chat_id, 
         trackingNumber, 
-        sendCode
+        sendCode,
+        recipientName
       );
       
       if (sent) {
@@ -607,5 +639,6 @@ export {
   extractPickupCode,
   extractSendCode,
   extractLockerId,
+  extractRecipientName,
   matchTrackingNumber,
 };
