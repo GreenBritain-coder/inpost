@@ -9,9 +9,14 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
+// Determine SSL configuration
+// Only use SSL if explicitly enabled via DB_USE_SSL environment variable
+// Coolify's internal PostgreSQL typically doesn't require SSL
+const useSSL = process.env.DB_USE_SSL === 'true';
+
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: useSSL ? { rejectUnauthorized: false } : false,
 });
 
 pool.on('error', (err) => {
