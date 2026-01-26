@@ -260,6 +260,8 @@ export async function checkInPostStatus(trackingNumber: string): Promise<{
       };
     }
 
+    // Debug: Log API key status (first 4 chars only for security)
+    console.log(`[${trackingNumber}] TrackingMore API key configured: ${TRACKINGMORE_API_KEY.substring(0, 4)}... (length: ${TRACKINGMORE_API_KEY.length})`);
     console.log(`[${trackingNumber}] Fetching via TrackingMore API...`);
     
     // Clean tracking number (remove spaces)
@@ -283,15 +285,24 @@ export async function checkInPostStatus(trackingNumber: string): Promise<{
         await new Promise(resolve => setTimeout(resolve, 500));
         
         // Use the correct endpoint: /trackings/create
+        // Try both header formats - v4 might use different header than v2
+        const headers: Record<string, string> = {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        };
+        
+        // Try Tracking-Api-Key first (v4 format), fallback to Trackingmore-Api-Key (v2 format)
+        // Based on user feedback that same API key works on another site
+        headers['Tracking-Api-Key'] = TRACKINGMORE_API_KEY;
+        
+        console.log(`[${trackingNumber}] Using header: Tracking-Api-Key (v4 format)`);
+        console.log(`[${trackingNumber}] API Base URL: ${TRACKINGMORE_API_BASE}`);
+        
         const createResponse = await axios.post(
           `${TRACKINGMORE_API_BASE}/trackings/create`,
           requestBody,
           {
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json',
-              'Trackingmore-Api-Key': TRACKINGMORE_API_KEY,
-            },
+            headers,
             timeout: 30000,
           }
         );
@@ -332,6 +343,18 @@ export async function checkInPostStatus(trackingNumber: string): Promise<{
           const errorData = createError.response.data;
           const errorCode = errorData?.meta?.code;
           const errorStatus = createError.response.status;
+          
+          // Enhanced logging for 401 errors
+          if (errorStatus === 401) {
+            console.error(`[${trackingNumber}] 401 Authentication Error Details:`);
+            console.error(`  API Key configured: ${TRACKINGMORE_API_KEY ? 'YES' : 'NO'}`);
+            console.error(`  API Key length: ${TRACKINGMORE_API_KEY?.length || 0}`);
+            console.error(`  API Key preview: ${TRACKINGMORE_API_KEY?.substring(0, 8) || 'N/A'}...`);
+            console.error(`  Header used: Tracking-Api-Key`);
+            console.error(`  API Base: ${TRACKINGMORE_API_BASE}`);
+            console.error(`  Error message: ${errorData?.meta?.message || 'Unknown'}`);
+            console.error(`  Full error response:`, JSON.stringify(errorData, null, 2));
+          }
           
           // Handle 400 with code 4101: "Tracking No. already exists" - response may only have minimal data
           if (errorStatus === 400 && errorCode === 4101) {
@@ -414,7 +437,7 @@ export async function checkInPostStatus(trackingNumber: string): Promise<{
               tracking_numbers: cleanTrackingNumber,
             },
             headers: {
-              'Trackingmore-Api-Key': TRACKINGMORE_API_KEY,
+              'Tracking-Api-Key': TRACKINGMORE_API_KEY,  // v4 uses Tracking-Api-Key
               'Content-Type': 'application/json',
             },
             timeout: 30000,
