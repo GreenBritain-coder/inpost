@@ -858,6 +858,64 @@ router.patch(
   }
 );
 
+// Update user/telegram/email info for existing tracking number
+// This allows manually uploaded tracking numbers to receive pickup codes via Telegram
+router.patch(
+  '/numbers/:id/user-info',
+  [
+    body('user_id').optional().isInt(),
+    body('telegram_chat_id').optional().isInt().toInt(),
+    body('email_used').optional().isEmail().normalizeEmail(),
+  ],
+  async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const { id } = req.params;
+      const { user_id, telegram_chat_id, email_used } = req.body;
+      
+      const tracking = await getTrackingNumberById(Number(id));
+      if (!tracking) {
+        return res.status(404).json({ error: 'Tracking number not found' });
+      }
+
+      // Update user info fields
+      const result = await pool.query(
+        `UPDATE tracking_numbers 
+         SET user_id = COALESCE($1, user_id),
+             telegram_chat_id = COALESCE($2, telegram_chat_id),
+             email_used = COALESCE($3, email_used)
+         WHERE id = $4
+         RETURNING *`,
+        [
+          user_id || null,
+          telegram_chat_id ? BigInt(telegram_chat_id).toString() : null,
+          email_used || null,
+          Number(id)
+        ]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Tracking number not found' });
+      }
+
+      console.log(`Updated user info for tracking ${id}: user_id=${user_id || 'unchanged'}, telegram_chat_id=${telegram_chat_id || 'unchanged'}, email_used=${email_used || 'unchanged'}`);
+      
+      // Get updated tracking with joins
+      const allTracking = await getAllTrackingNumbers(1, 10000);
+      const updated = allTracking.data.find(t => t.id === Number(id));
+      
+      res.json(updated);
+    } catch (error) {
+      console.error('Error updating tracking user info:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
 // Logs endpoints
 router.get('/logs/status-changes', async (req: AuthRequest, res: Response) => {
   try {
