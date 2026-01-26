@@ -6,6 +6,7 @@ import authRoutes from './routes/auth';
 import trackingRoutes from './routes/tracking';
 import analyticsRoutes from './routes/analytics';
 import webhookRoutes from './routes/webhook';
+import telegramRoutes from './routes/telegram';
 import { startScheduler } from './services/scheduler';
 
 dotenv.config();
