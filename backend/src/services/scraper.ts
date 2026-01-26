@@ -269,8 +269,8 @@ export async function checkInPostStatus(trackingNumber: string): Promise<{
     
     try {
       // Step 1: Create tracking in TrackingMore (if not already exists)
-      // Use 'inpost' as the courier code for InPost lockers
-      const courierCode = 'inpost';
+      // Use 'inpost-paczkomaty' as the courier code for InPost lockers (TrackingMore v4 format)
+      const courierCode = 'inpost-paczkomaty';
       let trackingCreated = false;
       
       try {
@@ -397,7 +397,7 @@ export async function checkInPostStatus(trackingNumber: string): Promise<{
             await new Promise(resolve => setTimeout(resolve, 120000));
             trackingCreated = true; // Assume it might exist, try to GET it
           }
-          // Handle 4120: Invalid courier code (shouldn't happen with inpost, but log it)
+          // Handle 4120: Invalid courier code (shouldn't happen with inpost-paczkomaty, but log it)
           else if (errorCode === 4120) {
             console.warn(`[${trackingNumber}] Invalid courier code (4120): ${errorData?.meta?.message}`);
           }
