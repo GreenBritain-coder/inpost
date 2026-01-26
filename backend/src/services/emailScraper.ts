@@ -173,14 +173,16 @@ function extractLockerId(text: string): string | null {
 /**
  * Match tracking number to shipment and return user info
  * Returns exactly 1 match, or null if no match or multiple matches
+ * Also checks if pickup code was already sent to prevent duplicates
  */
 async function matchTrackingNumber(trackingNumber: string): Promise<{
   user_id: number;
   telegram_chat_id: bigint;
   tracking_id: number;
+  pickup_code_sent_at: Date | null;
 } | null> {
   const result = await pool.query(
-    `SELECT id, user_id, telegram_chat_id 
+    `SELECT id, user_id, telegram_chat_id, pickup_code_sent_at
      FROM tracking_numbers 
      WHERE tracking_number = $1 
      AND user_id IS NOT NULL 
@@ -204,6 +206,7 @@ async function matchTrackingNumber(trackingNumber: string): Promise<{
     tracking_id: result.rows[0].id,
     user_id: result.rows[0].user_id,
     telegram_chat_id: BigInt(result.rows[0].telegram_chat_id),
+    pickup_code_sent_at: result.rows[0].pickup_code_sent_at,
   };
 }
 
@@ -242,14 +245,15 @@ async function markPickupCodeSent(trackingId: number): Promise<void> {
  * @param emailText - Plain text content of email
  * @param emailHtml - HTML content of email
  * @param emailAccount - Email account that received this email (for logging)
+ * @returns true if email was successfully processed, false otherwise
  */
-async function processEmail(emailText: string, emailHtml: string, emailAccount?: string): Promise<void> {
+async function processEmail(emailText: string, emailHtml: string, emailAccount?: string): Promise<boolean> {
   const fullText = emailText + ' ' + emailHtml.replace(/<[^>]*>/g, ' '); // Combine text and HTML
   
   const trackingNumber = extractTrackingNumber(fullText);
   if (!trackingNumber) {
     console.log(`[Email Scraper]${emailAccount ? ` [${emailAccount}]` : ''} No tracking number found in email`);
-    return;
+    return false;
   }
 
   console.log(`[Email Scraper]${emailAccount ? ` [${emailAccount}]` : ''} Found tracking number: ${trackingNumber}`);
@@ -258,7 +262,13 @@ async function processEmail(emailText: string, emailHtml: string, emailAccount?:
   const match = await matchTrackingNumber(trackingNumber);
   if (!match) {
     console.warn(`[Email Scraper] Cannot send code - no valid match for ${trackingNumber}`);
-    return;
+    return false;
+  }
+
+  // Check if pickup code was already sent (prevent duplicates)
+  if (match.pickup_code_sent_at) {
+    console.log(`[Email Scraper] Pickup code already sent for ${trackingNumber} at ${match.pickup_code_sent_at}, skipping duplicate`);
+    return true; // Return true so email can be marked as read (already processed)
   }
 
   // Extract pickup code and locker ID
@@ -267,7 +277,7 @@ async function processEmail(emailText: string, emailHtml: string, emailAccount?:
 
   if (!pickupCode) {
     console.warn(`[Email Scraper] No pickup code found for tracking number: ${trackingNumber}`);
-    return;
+    return false;
   }
 
   console.log(`[Email Scraper] Extracted - Tracking: ${trackingNumber}, Code: ${pickupCode}, Locker: ${lockerId || 'N/A'}`);
@@ -286,30 +296,43 @@ async function processEmail(emailText: string, emailHtml: string, emailAccount?:
   
   if (!sent) {
     console.error(`[Email Scraper] Failed to send Telegram message for ${trackingNumber}`);
-    return; // Don't mark as sent if Telegram failed
+    return false; // Don't mark as sent if Telegram failed
   }
   
   // Mark as sent
   await markPickupCodeSent(match.tracking_id);
 
   console.log(`[Email Scraper] ✅ Successfully processed email for ${trackingNumber}`);
+  return true;
 }
 
 /**
  * Process emails from IMAP search results
+ * Marks emails as read after successful processing
  */
 async function processEmails(imap: Imap, results: number[], emailAccount: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const fetch = imap.fetch(results, { bodies: '' });
+    const processedUids: number[] = [];
 
     fetch.on('message', (msg, seqno) => {
+      let uid: number | null = null;
+      
+      msg.once('attributes', (attrs) => {
+        uid = attrs.uid;
+      });
+
       msg.on('body', async (stream) => {
         const parsed = await simpleParser(stream);
         const emailText = parsed.text || '';
         const emailHtml = parsed.html || '';
 
         try {
-          await processEmail(emailText, emailHtml, emailAccount);
+          const success = await processEmail(emailText, emailHtml, emailAccount);
+          // Mark as read if successfully processed (or already processed before)
+          if (success && uid) {
+            processedUids.push(uid);
+          }
         } catch (error) {
           console.error(`[Email Scraper] Error processing email ${seqno} from ${emailAccount}:`, error);
         }
@@ -317,6 +340,16 @@ async function processEmails(imap: Imap, results: number[], emailAccount: string
     });
 
     fetch.once('end', () => {
+      // Mark all successfully processed emails as read
+      if (processedUids.length > 0) {
+        imap.addFlags(processedUids, '\\Seen', (err) => {
+          if (err) {
+            console.error(`[Email Scraper] Failed to mark ${processedUids.length} email(s) as read:`, err);
+          } else {
+            console.log(`[Email Scraper] Marked ${processedUids.length} email(s) as read`);
+          }
+        });
+      }
       console.log(`[Email Scraper] Finished processing emails for ${emailAccount}`);
       resolve();
     });
