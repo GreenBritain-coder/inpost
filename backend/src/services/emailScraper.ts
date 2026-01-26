@@ -244,15 +244,23 @@ async function markPickupCodeSent(trackingId: number): Promise<void> {
  * Process a single email message
  * @param emailText - Plain text content of email
  * @param emailHtml - HTML content of email
+ * @param emailSubject - Email subject line (for logging)
  * @param emailAccount - Email account that received this email (for logging)
  * @returns true if email was successfully processed, false otherwise
  */
-async function processEmail(emailText: string, emailHtml: string, emailAccount?: string): Promise<boolean> {
+async function processEmail(emailText: string, emailHtml: string, emailSubject: string = '', emailAccount?: string): Promise<boolean> {
   const fullText = emailText + ' ' + emailHtml.replace(/<[^>]*>/g, ' '); // Combine text and HTML
+  
+  // Debug logging to see email content
+  console.log(`[Email Scraper]${emailAccount ? ` [${emailAccount}]` : ''} Processing email with subject: "${emailSubject}"`);
+  console.log(`[Email Scraper] Email text length: ${emailText.length}, HTML length: ${emailHtml.length}`);
+  console.log(`[Email Scraper] First 200 chars of text: ${emailText.substring(0, 200)}`);
+  console.log(`[Email Scraper] First 200 chars of HTML (stripped): ${emailHtml.replace(/<[^>]*>/g, ' ').substring(0, 200)}`);
   
   const trackingNumber = extractTrackingNumber(fullText);
   if (!trackingNumber) {
     console.log(`[Email Scraper]${emailAccount ? ` [${emailAccount}]` : ''} No tracking number found in email`);
+    console.log(`[Email Scraper] Full text (first 500 chars): ${fullText.substring(0, 500)}`);
     return false;
   }
 
@@ -326,9 +334,10 @@ async function processEmails(imap: Imap, results: number[], emailAccount: string
         const parsed = await simpleParser(stream);
         const emailText = parsed.text || '';
         const emailHtml = parsed.html || '';
+        const emailSubject = parsed.subject || '';
 
         try {
-          const success = await processEmail(emailText, emailHtml, emailAccount);
+          const success = await processEmail(emailText, emailHtml, emailSubject, emailAccount);
           // Mark as read if successfully processed (or already processed before)
           if (success && uid) {
             processedUids.push(uid);
