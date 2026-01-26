@@ -337,9 +337,9 @@ export default function Logs() {
               onChange={(e) => setStatusFilter(e.target.value as 'all' | 'not_scanned' | 'scanned' | 'delivered')}
             >
               <option value="all">All Statuses</option>
-              <option value="not_scanned">🔴 Not Scanned</option>
-              <option value="scanned">🟡 Scanned</option>
-              <option value="delivered">🟢 Delivered</option>
+              <option value="not_scanned">🔴 Not Collected</option>
+              <option value="scanned">🟡 In Transit</option>
+              <option value="delivered">🟢 Ready for Pickup</option>
             </select>
           </label>
         </div>

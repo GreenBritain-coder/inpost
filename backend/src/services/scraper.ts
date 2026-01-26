@@ -198,7 +198,7 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
       return {
         status: 'not_scanned',
         details,
-        statusHeader: statusHeader || 'Not Scanned',
+        statusHeader: statusHeader || 'Not Collected',
         trackingmoreStatus,
         events: parsedEvents,
       };
@@ -219,7 +219,7 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
         return {
           status: 'not_scanned',
           details,
-          statusHeader: statusHeader || 'Not Scanned',
+          statusHeader: statusHeader || 'Not Collected',
           trackingmoreStatus,
           itemReceived: itemReceived || null,
           events: parsedEvents,

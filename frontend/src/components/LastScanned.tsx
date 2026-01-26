@@ -221,13 +221,13 @@ export default function LastScanned() {
         </div>
       </div>
 
-      {/* Modal for Not Scanned Items */}
+      {/* Modal for Not Collected Items */}
       {modalOpen && (
         <div className="modal-overlay" onClick={closeModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>
-                🔴 Not Scanned Items - {
+                🔴 Not Collected Items - {
                   selectedPeriod === 'today' ? 'Today' :
                   selectedPeriod === 'yesterday' ? 'Yesterday' :
                   selectedPeriod === 'twoDaysAgo' ? '2 Days Ago' :
@@ -248,7 +248,7 @@ export default function LastScanned() {
                 <div className="error">{itemsError}</div>
               ) : notScannedItems.length === 0 ? (
                 <div className="empty-state">
-                  <p>No not scanned items found for this date.</p>
+                  <p>No not collected items found for this date.</p>
                 </div>
               ) : (
                 <div className="not-scanned-list">

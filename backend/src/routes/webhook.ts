@@ -96,26 +96,59 @@ function verifyWebhookSignature(body: string, signature: string, timestamp?: str
 
 /**
  * Map TrackingMore delivery_status to our TrackingStatus enum
+ * This should match the logic in scraper.ts parseTrackingMoreResponse for consistency
  */
-function mapDeliveryStatus(deliveryStatus: string | null | undefined): TrackingStatus {
+function mapDeliveryStatus(deliveryStatus: string | null | undefined, trackingData?: any): TrackingStatus {
   if (!deliveryStatus) {
-    return 'not_scanned';
+    // Check if we have tracking events - if so, consider it scanned
+    const hasEvents = trackingData?.origin_info?.trackinfo?.length > 0 || 
+                     trackingData?.destination_info?.trackinfo?.length > 0 ||
+                     trackingData?.latest_event;
+    return hasEvents ? 'scanned' : 'not_scanned';
   }
 
   const statusLower = deliveryStatus.toLowerCase();
 
-  if (statusLower === 'delivered' || statusLower.includes('delivered')) {
+  // Map to delivered status
+  if (statusLower.includes('delivered') || 
+      statusLower.includes('delivery completed') ||
+      statusLower.includes('delivered to recipient')) {
     return 'delivered';
-  } else if (
+  } 
+  // Map to scanned status - comprehensive list matching scraper.ts
+  else if (
     statusLower === 'transit' ||
     statusLower === 'pickup' ||
     statusLower === 'inforeceived' ||
+    statusLower.includes('in transit') || 
+    statusLower.includes('on its way') ||
+    statusLower.includes('collected') ||
+    statusLower.includes('accepted') ||
+    statusLower.includes('processed') ||
+    statusLower.includes('scanned') ||
+    statusLower.includes('we\'ve got it') ||
+    statusLower.includes('arrived') ||
+    statusLower.includes('departed') ||
+    statusLower.includes('out for delivery') ||
     statusLower.includes('transit') ||
     statusLower.includes('pickup')
   ) {
     return 'scanned';
-  } else {
+  } 
+  // Map to not_scanned
+  else if (
+    statusLower.includes('not found') ||
+    statusLower.includes('no information') ||
+    statusLower.includes('pending')
+  ) {
     return 'not_scanned';
+  } 
+  // Default: check if we have tracking events
+  else {
+    const hasEvents = trackingData?.origin_info?.trackinfo?.length > 0 || 
+                     trackingData?.destination_info?.trackinfo?.length > 0 ||
+                     trackingData?.latest_event;
+    return hasEvents ? 'scanned' : 'not_scanned';
   }
 }
 
@@ -319,7 +352,8 @@ router.post('/trackingmore', async (req: any, res: Response) => {
     }
 
     // Map delivery_status to our TrackingStatus enum
-    const mappedStatus = mapDeliveryStatus(deliveryStatus);
+    // Pass trackingData to allow fallback logic based on events
+    const mappedStatus = mapDeliveryStatus(deliveryStatus, trackingData);
 
     // Only update if status changed or statusHeader is different or trackingmoreStatus changed
     const trackingmoreStatusChanged = trackingmoreStatus && trackingmoreStatus !== tracking.trackingmore_status;

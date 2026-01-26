@@ -151,7 +151,7 @@ export default function Analytics() {
               <div className="stat-value">{overview.total_items}</div>
             </div>
             <div className="stat-item">
-              <div className="stat-label">Not Scanned</div>
+              <div className="stat-label">Not Collected</div>
               <div className="stat-value">{overview.not_scanned_count}</div>
             </div>
             <div className="stat-item">
@@ -246,15 +246,15 @@ export default function Analytics() {
                   <span className="box-stat-value">{box.total_items}</span>
                 </div>
                 <div className="box-stat">
-                  <span className="box-stat-label">🔴 Not Scanned:</span>
+                  <span className="box-stat-label">🔴 Not Collected:</span>
                   <span className="box-stat-value">{box.not_scanned_count}</span>
                 </div>
                 <div className="box-stat">
-                  <span className="box-stat-label">🟡 Scanned:</span>
+                  <span className="box-stat-label">🟡 In Transit:</span>
                   <span className="box-stat-value">{box.scanned_count}</span>
                 </div>
                 <div className="box-stat">
-                  <span className="box-stat-label">🟢 Delivered:</span>
+                  <span className="box-stat-label">🟢 Ready for Pickup:</span>
                   <span className="box-stat-value">{box.delivered_count}</span>
                 </div>
                 <div className="box-stat">
@@ -292,7 +292,7 @@ export default function Analytics() {
                 <span className="box-stat-value">{overview.total_items}</span>
               </div>
               <div className="box-stat">
-                <span className="box-stat-label">🔴 Not Scanned:</span>
+                <span className="box-stat-label">🔴 Not Collected:</span>
                 <span className="box-stat-value">{overview.not_scanned_count}</span>
               </div>
               <div className="box-stat">

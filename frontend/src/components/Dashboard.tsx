@@ -15,9 +15,9 @@ const STATUS_EMOJIS = {
 };
 
 const STATUS_LABELS = {
-  not_scanned: 'Not Scanned',
-  scanned: 'Scanned by InPost',
-  delivered: 'Delivered',
+  not_scanned: 'Not Collected',
+  scanned: 'In Transit',
+  delivered: 'Ready for Pickup',
 };
 
 export default function Dashboard() {
@@ -371,9 +371,9 @@ export default function Dashboard() {
             aria-label="Filter by Status"
           >
             <option value="">All Statuses</option>
-            <option value="not_scanned">🔴 Not Scanned ({stats.not_scanned})</option>
-            <option value="scanned">🟡 Scanned ({stats.scanned})</option>
-            <option value="delivered">🟢 Delivered ({stats.delivered})</option>
+            <option value="not_scanned">🔴 Not Collected ({stats.not_scanned})</option>
+            <option value="scanned">🟡 In Transit ({stats.scanned})</option>
+            <option value="delivered">🟢 Ready for Pickup ({stats.delivered})</option>
           </select>
         </label>
         <label>
@@ -413,21 +413,21 @@ export default function Dashboard() {
           <div className="stat-value">
             {stats.not_scanned}
           </div>
-          <div className="stat-label">Not Scanned</div>
+          <div className="stat-label">Not Collected</div>
         </div>
         <div className="stat-card" style={{ borderColor: STATUS_COLORS.scanned }}>
           <div className="stat-emoji">{STATUS_EMOJIS.scanned}</div>
           <div className="stat-value">
             {stats.scanned}
           </div>
-          <div className="stat-label">Scanned</div>
+          <div className="stat-label">In Transit</div>
         </div>
         <div className="stat-card" style={{ borderColor: STATUS_COLORS.delivered }}>
           <div className="stat-emoji">{STATUS_EMOJIS.delivered}</div>
           <div className="stat-value">
             {stats.delivered}
           </div>
-          <div className="stat-label">Delivered</div>
+          <div className="stat-label">Ready for Pickup</div>
         </div>
         <div className="stat-card">
           <div className="stat-value">{stats.total}</div>
@@ -669,9 +669,9 @@ export default function Dashboard() {
                         className="status-select"
                         aria-label={`Change status for tracking number ${tn.tracking_number}`}
                       >
-                        <option value="not_scanned">🔴 Not Scanned</option>
-                        <option value="scanned">🟡 Scanned</option>
-                        <option value="delivered">🟢 Delivered</option>
+                        <option value="not_scanned">🔴 Not Collected</option>
+                        <option value="scanned">🟡 In Transit</option>
+                        <option value="delivered">🟢 Ready for Pickup</option>
                       </select>
                       <button
                         onClick={() => handleRefreshSingle(tn.id)}
@@ -838,9 +838,9 @@ export default function Dashboard() {
                       className="status-select"
                       style={{ width: '100%', minHeight: '44px' }}
                     >
-                      <option value="not_scanned">🔴 Not Scanned</option>
-                      <option value="scanned">🟡 Scanned</option>
-                      <option value="delivered">🟢 Delivered</option>
+                      <option value="not_scanned">🔴 Not Collected</option>
+                      <option value="scanned">🟡 In Transit</option>
+                      <option value="delivered">🟢 Ready for Pickup</option>
                     </select>
                     <button
                       onClick={() => handleRefreshSingle(tn.id)}
