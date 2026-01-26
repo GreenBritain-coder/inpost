@@ -190,9 +190,12 @@ async function processTelegramUpdate(update: any): Promise<void> {
   }
 
   // Check if message is a tracking number (24 characters alphanumeric)
-  const trackingNumberMatch = text.match(/\b([A-Z0-9]{24})\b/);
+  // Remove spaces and make case-insensitive for better matching
+  const cleanedText = text.replace(/\s+/g, '').toUpperCase();
+  const trackingNumberMatch = cleanedText.match(/([A-Z0-9]{24})/);
   if (trackingNumberMatch) {
     const trackingNumber = trackingNumberMatch[1];
+    console.log(`[Telegram] Detected tracking number: ${trackingNumber}`);
     try {
       const result = await pool.query(
         `SELECT tracking_number, pickup_code, locker_id, current_status, 
