@@ -354,12 +354,15 @@ async function checkImapAccount(account: ImapAccountConfig): Promise<void> {
         // IMAP search: unread emails from InPost OR emails from last 24 hours from InPost
         // Use separate searches and combine, or use a more flexible approach
         // For node-imap, we need to structure the OR correctly
+        // IMAP OR only supports exactly 2 arguments, so nest them
         imap.search([
           'UNSEEN',
           ['OR', 
             ['FROM', 'inpost.pl'], 
-            ['FROM', 'inpost.co.uk'],
-            ['FROM', 'inpost@inpost.co.uk']
+            ['OR', 
+              ['FROM', 'inpost.co.uk'],
+              ['FROM', 'inpost@inpost.co.uk']
+            ]
           ]
         ], async (err, results) => {
           if (err) {
@@ -371,12 +374,15 @@ async function checkImapAccount(account: ImapAccountConfig): Promise<void> {
           // If no unread emails found, also check emails from last 24 hours
           if (!results || results.length === 0) {
             console.log(`[Email Scraper] No unread emails found for ${account.user}, checking last 24 hours...`);
+            // IMAP OR only supports exactly 2 arguments, so nest them
             imap.search([
               ['SINCE', yesterday],
               ['OR', 
                 ['FROM', 'inpost.pl'], 
-                ['FROM', 'inpost.co.uk'],
-                ['FROM', 'inpost@inpost.co.uk']
+                ['OR', 
+                  ['FROM', 'inpost.co.uk'],
+                  ['FROM', 'inpost@inpost.co.uk']
+                ]
               ]
             ], async (err2, results2) => {
               if (err2) {
