@@ -30,15 +30,17 @@ router.post('/webhook', express.json(), async (req: Request, res: Response) => {
 /**
  * Helper function to send a message via Telegram API
  */
-async function sendTelegramMessage(chatId: number, text: string): Promise<boolean> {
+async function sendTelegramMessage(chatId: number | bigint, text: string): Promise<boolean> {
   if (!TELEGRAM_BOT_TOKEN) {
     console.error('[Telegram] Bot token not configured');
     return false;
   }
 
   try {
+    // Convert BigInt to string for serialization (Telegram API accepts string or number)
+    const chatIdStr = typeof chatId === 'bigint' ? chatId.toString() : String(chatId);
     const response = await axios.post(`${TELEGRAM_API_URL}/sendMessage`, {
-      chat_id: chatId,
+      chat_id: chatIdStr,
       text: text,
       parse_mode: 'HTML',
     });

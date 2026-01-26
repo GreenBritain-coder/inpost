@@ -150,6 +150,11 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
   // Send heartbeat more frequently initially to keep connection alive
   const sendHeartbeat = () => {
     if (!isConnectionOpen) return;
+    // Check if response is still writable
+    if (res.writableEnded || res.destroyed) {
+      isConnectionOpen = false;
+      return;
+    }
     try {
       res.write(`data: ${JSON.stringify({ 
         type: 'heartbeat', 
@@ -160,6 +165,15 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
         nodeRes.flush();
       }
     } catch (error) {
+      // Ignore write errors if connection is already closed
+      if (error instanceof Error && (
+        error.message.includes('write after end') ||
+        error.message.includes('destroyed') ||
+        error.message.includes('aborted')
+      )) {
+        isConnectionOpen = false;
+        return;
+      }
       console.error('Error sending heartbeat:', error);
       isConnectionOpen = false;
     }
@@ -204,24 +218,42 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
       );
       
       if (newLogs.rows.length > 0 && isConnectionOpen) {
-        // Send new logs to client
-        res.write(`data: ${JSON.stringify({ 
-          type: 'logs', 
-          logs: newLogs.rows,
-          timestamp: new Date().toISOString()
-        })}\n\n`);
-        
-        const nodeRes = res as any;
-        if (typeof nodeRes.flush === 'function') {
-          nodeRes.flush();
+        // Check if response is still writable
+        if (res.writableEnded || res.destroyed) {
+          isConnectionOpen = false;
+          return;
         }
-        
-        // Update last check time to the most recent log
-        lastCheck = newLogs.rows[0].changed_at;
+        try {
+          // Send new logs to client
+          res.write(`data: ${JSON.stringify({ 
+            type: 'logs', 
+            logs: newLogs.rows,
+            timestamp: new Date().toISOString()
+          })}\n\n`);
+          
+          const nodeRes = res as any;
+          if (typeof nodeRes.flush === 'function') {
+            nodeRes.flush();
+          }
+          
+          // Update last check time to the most recent log
+          lastCheck = newLogs.rows[0].changed_at;
+        } catch (error) {
+          // Ignore write errors if connection is already closed
+          if (error instanceof Error && (
+            error.message.includes('write after end') ||
+            error.message.includes('destroyed') ||
+            error.message.includes('aborted')
+          )) {
+            isConnectionOpen = false;
+            return;
+          }
+          throw error; // Re-throw unexpected errors
+        }
       }
     } catch (error) {
       console.error('Error in SSE stream:', error);
-      if (isConnectionOpen) {
+      if (isConnectionOpen && !res.writableEnded && !res.destroyed) {
         try {
           res.write(`data: ${JSON.stringify({ 
             type: 'error', 
@@ -233,48 +265,73 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
             nodeRes.flush();
           }
         } catch (writeError) {
-          console.error('Error writing error message:', writeError);
-          isConnectionOpen = false;
+          // Ignore write errors if connection is already closed
+          if (writeError instanceof Error && (
+            writeError.message.includes('write after end') ||
+            writeError.message.includes('destroyed') ||
+            writeError.message.includes('aborted')
+          )) {
+            isConnectionOpen = false;
+          } else {
+            console.error('Error writing error message:', writeError);
+            isConnectionOpen = false;
+          }
         }
       }
     }
   }, 2000); // Check every 2 seconds
   
   // Clean up on client disconnect
-  const cleanup = () => {
-    if (!isConnectionOpen) return; // Already cleaned up
+  let cleanupCalled = false;
+  const cleanup = (reason?: string) => {
+    if (cleanupCalled) return; // Prevent duplicate cleanup
+    cleanupCalled = true;
     isConnectionOpen = false;
     clearInterval(checkInterval);
     clearInterval(heartbeatInterval);
-    console.log('SSE connection cleaned up for user:', payload.email);
+    if (reason) {
+      console.log(`SSE connection cleaned up for user: ${payload.email} (${reason})`);
+    } else {
+      console.log(`SSE connection cleaned up for user: ${payload.email}`);
+    }
     try {
-      res.end();
+      if (!res.writableEnded && !res.destroyed) {
+        res.end();
+      }
     } catch (error) {
-      // Connection might already be closed
+      // Connection might already be closed - ignore
     }
   };
   
   req.on('close', () => {
-    console.log('SSE client disconnected (req.close) for user:', payload.email);
-    cleanup();
+    cleanup('client closed connection');
   });
   
-  // Also handle errors
-  req.on('error', (error) => {
-    console.error('SSE request error:', error);
-    cleanup();
+  // Handle request errors - "aborted" and ECONNRESET are normal when client disconnects
+  req.on('error', (error: any) => {
+    // Don't log "aborted" or ECONNRESET as errors - these are normal disconnects
+    if (error.code === 'ECONNRESET' || error.message === 'aborted') {
+      cleanup('client disconnected');
+    } else {
+      console.error('SSE request error:', error);
+      cleanup('request error');
+    }
   });
   
   // Handle response errors
-  res.on('error', (error) => {
-    console.error('SSE response error:', error);
-    cleanup();
+  res.on('error', (error: any) => {
+    // Don't log "aborted" or ECONNRESET as errors
+    if (error.code === 'ECONNRESET' || error.message === 'aborted') {
+      cleanup('response closed');
+    } else {
+      console.error('SSE response error:', error);
+      cleanup('response error');
+    }
   });
   
   // Handle response finish
   res.on('finish', () => {
-    console.log('SSE response finished for user:', payload.email);
-    cleanup();
+    cleanup('response finished');
   });
 });
 

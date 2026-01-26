@@ -24,8 +24,10 @@ export async function sendPickupCodeToTelegram(
     `\nYou have 48 hours to collect your parcel.`;
 
   try {
+    // Convert BigInt to string for serialization (Telegram API accepts string or number)
+    const chatIdStr = typeof chatId === 'bigint' ? chatId.toString() : String(chatId);
     const response = await axios.post(`${TELEGRAM_API_URL}/sendMessage`, {
-      chat_id: chatId,
+      chat_id: chatIdStr,
       text: message,
       parse_mode: 'HTML',
     });
@@ -68,8 +70,10 @@ export async function sendSendCodeToTelegram(
     `\nUse this code to drop off your parcel at any InPost locker or shop.`;
 
   try {
+    // Convert BigInt to string for serialization (Telegram API accepts string or number)
+    const chatIdStr = typeof chatId === 'bigint' ? chatId.toString() : String(chatId);
     const response = await axios.post(`${TELEGRAM_API_URL}/sendMessage`, {
-      chat_id: chatId,
+      chat_id: chatIdStr,
       text: message,
       parse_mode: 'HTML',
     });
