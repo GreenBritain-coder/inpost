@@ -2,6 +2,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Accept build-time arguments for Vite environment variables
+ARG VITE_API_URL
+ENV VITE_API_URL=$VITE_API_URL
+
 # Copy package files
 COPY package*.json ./
 COPY tsconfig*.json ./
@@ -17,6 +21,7 @@ COPY src ./src
 COPY index.html ./
 
 # Build the application (ensure NODE_ENV is development for build)
+# VITE_API_URL will be baked into the build at this step
 RUN NODE_ENV=development npm run build
 
 # Production stage
