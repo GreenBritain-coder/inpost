@@ -30,15 +30,29 @@ function getImapAccounts(): ImapAccountConfig[] {
     try {
       // Remove any surrounding quotes that Coolify might add
       let cleanedJson = accountsJson.trim();
+      
+      // Debug: Log first few characters with their char codes
+      console.log('[Email Scraper] IMAP_ACCOUNTS first 10 chars:', cleanedJson.substring(0, 10));
+      console.log('[Email Scraper] IMAP_ACCOUNTS char codes (first 10):', 
+        Array.from(cleanedJson.substring(0, 10)).map(c => `${c}(${c.charCodeAt(0)})`).join(' '));
+      
+      // Remove surrounding quotes (single or double)
       if ((cleanedJson.startsWith('"') && cleanedJson.endsWith('"')) ||
           (cleanedJson.startsWith("'") && cleanedJson.endsWith("'"))) {
         cleanedJson = cleanedJson.slice(1, -1);
+        console.log('[Email Scraper] Removed surrounding quotes');
       }
       
+      // Handle escaped quotes (if Coolify escaped them)
+      cleanedJson = cleanedJson.replace(/\\"/g, '"').replace(/\\'/g, "'");
+      
+      // Try parsing
       const accounts = JSON.parse(cleanedJson) as ImapAccountConfig[];
       if (!Array.isArray(accounts)) {
         throw new Error('IMAP_ACCOUNTS must be a JSON array');
       }
+      
+      console.log(`[Email Scraper] Successfully parsed ${accounts.length} IMAP account(s)`);
       
       return accounts.map(acc => ({
         user: acc.user,
@@ -50,8 +64,9 @@ function getImapAccounts(): ImapAccountConfig[] {
       }));
     } catch (error) {
       console.error('[Email Scraper] Failed to parse IMAP_ACCOUNTS JSON:', error);
-      console.error('[Email Scraper] Raw IMAP_ACCOUNTS value (first 100 chars):', accountsJson.substring(0, 100));
+      console.error('[Email Scraper] Raw IMAP_ACCOUNTS value (first 200 chars):', accountsJson.substring(0, 200));
       console.error('[Email Scraper] Full IMAP_ACCOUNTS value length:', accountsJson.length);
+      console.error('[Email Scraper] Full IMAP_ACCOUNTS value:', accountsJson);
     }
   }
 
