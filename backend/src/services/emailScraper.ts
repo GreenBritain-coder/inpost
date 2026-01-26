@@ -336,18 +336,27 @@ async function markSendCodeSent(trackingId: number): Promise<void> {
  * @returns true if email was successfully processed, false otherwise
  */
 async function processEmail(emailText: string, emailHtml: string, emailSubject: string = '', emailAccount?: string): Promise<boolean> {
-  const fullText = emailText + ' ' + emailHtml.replace(/<[^>]*>/g, ' '); // Combine text and HTML
+  // Better HTML text extraction: remove style/script tags first, then strip all HTML
+  let cleanHtml = emailHtml
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '') // Remove style tags
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') // Remove script tags
+    .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '') // Remove head section
+    .replace(/<[^>]*>/g, ' ') // Strip remaining HTML tags
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .trim();
+  
+  const fullText = emailText + ' ' + cleanHtml; // Combine text and cleaned HTML
   
   // Debug logging to see email content
   console.log(`[Email Scraper]${emailAccount ? ` [${emailAccount}]` : ''} Processing email with subject: "${emailSubject}"`);
   console.log(`[Email Scraper] Email text length: ${emailText.length}, HTML length: ${emailHtml.length}`);
-  console.log(`[Email Scraper] First 200 chars of text: ${emailText.substring(0, 200)}`);
-  console.log(`[Email Scraper] First 200 chars of HTML (stripped): ${emailHtml.replace(/<[^>]*>/g, ' ').substring(0, 200)}`);
+  console.log(`[Email Scraper] First 300 chars of cleaned content: ${fullText.substring(0, 300)}`);
   
   const trackingNumber = extractTrackingNumber(fullText);
   if (!trackingNumber) {
     console.log(`[Email Scraper]${emailAccount ? ` [${emailAccount}]` : ''} No tracking number found in email`);
-    console.log(`[Email Scraper] Full text (first 500 chars): ${fullText.substring(0, 500)}`);
+    console.log(`[Email Scraper] Content sample (chars 500-1000): ${fullText.substring(500, 1000)}`);
+    console.log(`[Email Scraper] Content sample (chars 1000-1500): ${fullText.substring(1000, 1500)}`);
     return false;
   }
 
