@@ -502,10 +502,15 @@ async function processEmails(imap: Imap, results: number[], emailAccount: string
           } else {
             console.log(`[Email Scraper] Marked ${processedUids.length} email(s) as read`);
           }
+          // Resolve after flags are set (or failed) - ensures connection stays open until flags are saved
+          console.log(`[Email Scraper] Finished processing emails for ${emailAccount}`);
+          resolve();
         });
+      } else {
+        // No emails to mark as read, resolve immediately
+        console.log(`[Email Scraper] Finished processing emails for ${emailAccount}`);
+        resolve();
       }
-      console.log(`[Email Scraper] Finished processing emails for ${emailAccount}`);
-      resolve();
     });
 
     fetch.once('error', (err) => {
