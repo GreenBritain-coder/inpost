@@ -444,7 +444,7 @@ export default function AddTracking() {
               id="email-used"
               value={emailUsed}
               onChange={(e) => setEmailUsed(e.target.value)}
-              placeholder="e.g., swarnes@gmail.com"
+              placeholder="e.g., user@example.com"
             />
             <small>Email address used when creating the InPost shipment</small>
           </div>
