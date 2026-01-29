@@ -609,6 +609,7 @@ router.post(
     body('tracking_number').notEmpty().trim(),
     body('box_id').optional().isInt(),
     body('user_id').optional().isInt(),
+    body('telegram_user_id').optional(), // Telegram from.id — for linking when user does /start (string or number)
     body('telegram_chat_id').optional().isInt().toInt(),
     body('email_used').optional().isEmail().normalizeEmail(),
   ],
@@ -619,7 +620,7 @@ router.post(
     }
 
     try {
-      const { tracking_number, box_id, user_id, telegram_chat_id, email_used } = req.body;
+      const { tracking_number, box_id, user_id, telegram_user_id, telegram_chat_id, email_used } = req.body;
       
       // Validate box exists if provided
       if (box_id) {
@@ -628,11 +629,24 @@ router.post(
           return res.status(404).json({ error: 'Box not found' });
         }
       }
+
+      // Resolve Telegram user ID to database user_id for linking (same as CSV upload)
+      let databaseUserId: number | null = user_id || null;
+      if (telegram_user_id != null && String(telegram_user_id).trim() !== '') {
+        try {
+          databaseUserId = await findOrCreateUserByTelegramUserId(String(telegram_user_id).trim());
+        } catch (e) {
+          return res.status(400).json({
+            error: 'Failed to find/create user for Telegram User ID',
+            details: e instanceof Error ? e.message : 'Unknown error',
+          });
+        }
+      }
       
       const tracking = await createTrackingNumber(
         tracking_number, 
         box_id || null,
-        user_id || null,
+        databaseUserId,
         telegram_chat_id || null,
         email_used || null
       );

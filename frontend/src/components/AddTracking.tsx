@@ -11,6 +11,7 @@ export default function AddTracking() {
   const [newBoxParentId, setNewBoxParentId] = useState<number | null>(null);
   const [showNewBox, setShowNewBox] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState('');
+  const [telegramUserId, setTelegramUserId] = useState('');
   const [emailUsed, setEmailUsed] = useState('');
   const [bulkTrackingNumbers, setBulkTrackingNumbers] = useState('');
   const [bulkCustomTimestamp, setBulkCustomTimestamp] = useState('');
@@ -132,13 +133,13 @@ export default function AddTracking() {
 
     try {
       await api.createTrackingNumber(
-        trackingNumber.trim(), 
+        trackingNumber.trim(),
         selectedBox || undefined,
-        undefined,
-        undefined,
+        telegramUserId.trim() || undefined,
         emailUsed.trim() || undefined
       );
       setTrackingNumber('');
+      setTelegramUserId('');
       setEmailUsed('');
       setMessage({ type: 'success', text: 'Tracking number added successfully' });
     } catch (error: any) {
@@ -410,6 +411,17 @@ export default function AddTracking() {
               placeholder="Enter tracking number"
               required
             />
+          </div>
+          <div className="form-group">
+            <label htmlFor="telegram-user-id">Telegram User ID (optional)</label>
+            <input
+              type="text"
+              id="telegram-user-id"
+              value={telegramUserId}
+              onChange={(e) => setTelegramUserId(e.target.value)}
+              placeholder="e.g. 7744334263"
+            />
+            <small>For linking: when this user does /start in Telegram they&apos;ll see this tracking. Same as CSV: user_id,tracking_number</small>
           </div>
           <div className="form-group">
             <label htmlFor="email-used">Email Used (optional)</label>
