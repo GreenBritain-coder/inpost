@@ -1,6 +1,7 @@
 import Imap from 'imap';
 import { simpleParser } from 'mailparser';
 import { pool } from '../db/connection';
+import { createTrackingNumber } from '../models/tracking';
 
 /**
  * Parse IMAP account configuration from environment variables
@@ -124,20 +125,22 @@ function extractTrackingNumber(text: string): string | null {
 
 /**
  * Extract pickup code from InPost email
- * Pickup codes are typically 6 digits
+ * Pickup codes are typically 6 digits (UK: "COLLECTION CODE 247089")
  */
 function extractPickupCode(text: string): string | null {
   // InPost pickup codes are 6 digits
   // Common patterns:
+  // - "COLLECTION CODE 247089" (UK ready-to-collect emails)
   // - "Pickup code: 123456"
   // - "Code: 123456"
   // - "Your code: 123456"
   
   const patterns = [
+    /collection[_\s]*code[:\s]*(\d{6})/i,
     /pickup[_\s]*code[:\s]*(\d{6})/i,
     /code[:\s]*(\d{6})/i,
     /your[_\s]*code[:\s]*(\d{6})/i,
-    /\b(\d{6})\b/g, // Generic 6-digit code
+    /\b(\d{6})\b/g, // Generic 6-digit code (last resort)
   ];
 
   for (const pattern of patterns) {
@@ -181,29 +184,30 @@ function extractSendCode(text: string): string | null {
 }
 
 /**
- * Extract locker ID from InPost email
- * Locker IDs are typically alphanumeric codes
+ * Extract locker/shop location from InPost email
+ * UK shop emails: "Delivered to: INPOST SHOP InPost shop - Co-operative NR13 5LP Norwich"
  */
 function extractLockerId(text: string): string | null {
-  // InPost locker IDs vary in format
-  // Common patterns:
-  // - "Locker: ABC123"
-  // - "Paczkomat: ABC123"
-  // - "At locker ABC123"
-  
+  // UK "ready to collect" emails: "InPost shop - Co-operative NR13 5LP Norwich"
+  const shopMatch = text.match(/inpost shop\s*-\s*([A-Za-z0-9\s\-.,]+?)(?=\s+Recipient|\s*$)/i);
+  if (shopMatch && shopMatch[1]?.trim()) {
+    return shopMatch[1].trim();
+  }
+  // "Delivered to: INPOST SHOP ..." fallback
+  const deliveredMatch = text.match(/delivered to:?\s*[^.]*?([A-Za-z0-9\s\-.,]+?)(?=\s+Recipient|\s*$)/i);
+  if (deliveredMatch && deliveredMatch[1]?.trim()) {
+    return deliveredMatch[1].trim();
+  }
+  // Locker IDs (alphanumeric codes)
   const patterns = [
     /locker[:\s]*([A-Z0-9]+)/i,
     /paczkomat[:\s]*([A-Z0-9]+)/i,
     /at[_\s]*locker[_\s]*([A-Z0-9]+)/i,
   ];
-
   for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match && match[1]) {
-      return match[1].toUpperCase();
-    }
+    const m = text.match(pattern);
+    if (m?.[1]) return m[1].toUpperCase();
   }
-
   return null;
 }
 
@@ -233,13 +237,14 @@ function extractRecipientName(text: string): string | null {
 }
 
 /**
- * Match tracking number to shipment and return user info
- * Returns exactly 1 match, or null if no match or multiple matches
- * Also checks if codes were already sent to prevent duplicates
+ * Match tracking number to shipment and return row info.
+ * Finds by tracking_number only so we can store pickup/send codes even when
+ * the parcel was added without user/Telegram. Telegram is only sent when telegram_chat_id is set.
+ * Returns exactly 1 match, or null if no match or multiple matches.
  */
 async function matchTrackingNumber(trackingNumber: string): Promise<{
-  user_id: number;
-  telegram_chat_id: bigint;
+  user_id: number | null;
+  telegram_chat_id: bigint | null;
   tracking_id: number;
   pickup_code_sent_at: Date | null;
   send_code_sent_at: Date | null;
@@ -247,9 +252,7 @@ async function matchTrackingNumber(trackingNumber: string): Promise<{
   const result = await pool.query(
     `SELECT id, user_id, telegram_chat_id, pickup_code_sent_at, send_code_sent_at
      FROM tracking_numbers 
-     WHERE tracking_number = $1 
-     AND user_id IS NOT NULL 
-     AND telegram_chat_id IS NOT NULL`,
+     WHERE tracking_number = $1`,
     [trackingNumber]
   );
 
@@ -260,17 +263,17 @@ async function matchTrackingNumber(trackingNumber: string): Promise<{
 
   if (result.rows.length > 1) {
     console.error(`[Email Scraper] CRITICAL: Multiple matches for tracking number: ${trackingNumber} (${result.rows.length} rows)`);
-    // Log all matches for investigation
     console.error('Matches:', result.rows);
-    return null; // Don't send code if ambiguous
+    return null;
   }
 
+  const row = result.rows[0];
   return {
-    tracking_id: result.rows[0].id,
-    user_id: result.rows[0].user_id,
-    telegram_chat_id: BigInt(result.rows[0].telegram_chat_id),
-    pickup_code_sent_at: result.rows[0].pickup_code_sent_at,
-    send_code_sent_at: result.rows[0].send_code_sent_at,
+    tracking_id: row.id,
+    user_id: row.user_id,
+    telegram_chat_id: row.telegram_chat_id != null ? BigInt(row.telegram_chat_id) : null,
+    pickup_code_sent_at: row.pickup_code_sent_at,
+    send_code_sent_at: row.send_code_sent_at,
   };
 }
 
@@ -369,18 +372,26 @@ async function processEmail(emailText: string, emailHtml: string, emailSubject: 
 
   console.log(`[Email Scraper]${emailAccount ? ` [${emailAccount}]` : ''} Found tracking number: ${trackingNumber}`);
 
-  // Match tracking number to shipment
-  const match = await matchTrackingNumber(trackingNumber);
-  if (!match) {
-    console.warn(`[Email Scraper] Cannot send code - no valid match for ${trackingNumber}`);
-    return false;
-  }
-
-  // Extract both pickup code (6-digit) and send code (9-digit)
+  // Extract codes first so we know if we should auto-create a row when missing
   const pickupCode = extractPickupCode(fullText);
   const sendCode = extractSendCode(fullText);
   const lockerId = extractLockerId(fullText);
   const recipientName = extractRecipientName(fullText);
+
+  // Match tracking number to shipment (by tracking_number only; user/Telegram optional)
+  let match = await matchTrackingNumber(trackingNumber);
+
+  // If no row exists but we have a code from the email, create a tracking row so we store the code
+  if (!match && (pickupCode || sendCode) && emailAccount) {
+    console.log(`[Email Scraper] No DB row for ${trackingNumber}; creating from email (email_used=${emailAccount})`);
+    await createTrackingNumber(trackingNumber, null, null, null, emailAccount);
+    match = await matchTrackingNumber(trackingNumber);
+  }
+
+  if (!match) {
+    console.warn(`[Email Scraper] Cannot store code - no match for ${trackingNumber}`);
+    return false;
+  }
 
   let processedSomething = false;
 
@@ -394,24 +405,27 @@ async function processEmail(emailText: string, emailHtml: string, emailSubject: 
     if (match.send_code_sent_at) {
       console.log(`[Email Scraper] Send code already sent for ${trackingNumber} at ${match.send_code_sent_at}, skipping duplicate`);
     } else {
-      // Update database with send code and recipient name
       await updateTrackingWithSendCode(match.tracking_id, sendCode, recipientName);
 
-      // Send to Telegram
-      const { sendSendCodeToTelegram } = await import('./telegramService');
-      const sent = await sendSendCodeToTelegram(
-        match.telegram_chat_id, 
-        trackingNumber, 
-        sendCode,
-        recipientName
-      );
-      
-      if (sent) {
-        await markSendCodeSent(match.tracking_id);
-        console.log(`[Email Scraper] ✅ Successfully processed SEND code for ${trackingNumber}`);
-        processedSomething = true;
+      if (match.telegram_chat_id != null) {
+        const { sendSendCodeToTelegram } = await import('./telegramService');
+        const sent = await sendSendCodeToTelegram(
+          match.telegram_chat_id,
+          trackingNumber,
+          sendCode,
+          recipientName
+        );
+        if (sent) {
+          await markSendCodeSent(match.tracking_id);
+          console.log(`[Email Scraper] ✅ Successfully processed SEND code for ${trackingNumber} (Telegram sent)`);
+          processedSomething = true;
+        } else {
+          console.error(`[Email Scraper] Failed to send Telegram message for send code ${trackingNumber}`);
+        }
       } else {
-        console.error(`[Email Scraper] Failed to send Telegram message for send code ${trackingNumber}`);
+        await markSendCodeSent(match.tracking_id);
+        console.log(`[Email Scraper] ✅ Stored SEND code for ${trackingNumber} (no Telegram chat linked)`);
+        processedSomething = true;
       }
     }
   }
@@ -423,24 +437,27 @@ async function processEmail(emailText: string, emailHtml: string, emailSubject: 
     if (match.pickup_code_sent_at) {
       console.log(`[Email Scraper] Pickup code already sent for ${trackingNumber} at ${match.pickup_code_sent_at}, skipping duplicate`);
     } else {
-      // Update database with pickup code
       await updateTrackingWithPickupCode(match.tracking_id, pickupCode, lockerId);
 
-      // Send to Telegram
-      const { sendPickupCodeToTelegram } = await import('./telegramService');
-      const sent = await sendPickupCodeToTelegram(
-        match.telegram_chat_id, 
-        trackingNumber, 
-        pickupCode, 
-        lockerId
-      );
-      
-      if (sent) {
-        await markPickupCodeSent(match.tracking_id);
-        console.log(`[Email Scraper] ✅ Successfully processed PICKUP code for ${trackingNumber}`);
-        processedSomething = true;
+      if (match.telegram_chat_id != null) {
+        const { sendPickupCodeToTelegram } = await import('./telegramService');
+        const sent = await sendPickupCodeToTelegram(
+          match.telegram_chat_id,
+          trackingNumber,
+          pickupCode,
+          lockerId
+        );
+        if (sent) {
+          await markPickupCodeSent(match.tracking_id);
+          console.log(`[Email Scraper] ✅ Successfully processed PICKUP code for ${trackingNumber} (Telegram sent)`);
+          processedSomething = true;
+        } else {
+          console.error(`[Email Scraper] Failed to send Telegram message for pickup code ${trackingNumber}`);
+        }
       } else {
-        console.error(`[Email Scraper] Failed to send Telegram message for pickup code ${trackingNumber}`);
+        await markPickupCodeSent(match.tracking_id);
+        console.log(`[Email Scraper] ✅ Stored PICKUP code for ${trackingNumber} (no Telegram chat linked)`);
+        processedSomething = true;
       }
     }
   }
