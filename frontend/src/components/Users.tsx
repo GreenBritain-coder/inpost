@@ -14,6 +14,7 @@ export default function Users() {
   const [trackingsModalList, setTrackingsModalList] = useState<TrackingNumber[]>([]);
   const [trackingsModalLoading, setTrackingsModalLoading] = useState(false);
   const [fetchingUsernameId, setFetchingUsernameId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     loadUsers();
@@ -96,6 +97,21 @@ export default function Users() {
       setError(err.response?.data?.error || 'Failed to fetch username from Telegram');
     } finally {
       setFetchingUsernameId(null);
+    }
+  };
+
+  const handleDeleteUser = async (u: UserSummary) => {
+    if (!window.confirm(`Delete user ${u.id}? Their trackings will be unassigned (not deleted).`)) return;
+    try {
+      setDeletingId(u.id);
+      setError('');
+      await api.deleteUser(u.id);
+      if (trackingsModalUser?.id === u.id) closeTrackingsModal();
+      await loadUsers();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to delete user');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -192,6 +208,15 @@ export default function Users() {
                       )}
                       <button type="button" onClick={() => openTrackingsModal(u)} className="users-btn users-btn-trackings" title="View linked tracking numbers">
                         View trackings
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteUser(u)}
+                        disabled={deletingId === u.id}
+                        className="users-btn users-btn-delete"
+                        title="Delete this user (trackings become unassigned)"
+                      >
+                        {deletingId === u.id ? 'Deleting…' : 'Delete'}
                       </button>
                     </>
                   )}

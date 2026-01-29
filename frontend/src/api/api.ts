@@ -234,6 +234,8 @@ export const api = {
   /** Fetch Telegram username from Telegram API using user's telegram_user_id (getChatMember); optionally saves to user. */
   fetchTelegramUsername: (userId: number) =>
     axios.post<{ username: string | null; user: UserSummary }>(`${API_URL}/tracking/users/${userId}/fetch-telegram-username`),
+  deleteUser: (userId: number) =>
+    axios.delete<{ message: string }>(`${API_URL}/tracking/users/${userId}`),
 };
 
 export interface UserSummary {

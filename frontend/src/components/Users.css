@@ -150,6 +150,16 @@
   background: #1abc9c;
 }
 
+.users-btn-delete {
+  background: #c0392b;
+  color: white;
+  margin-left: 0.5rem;
+}
+
+.users-btn-delete:hover:not(:disabled) {
+  background: #e74c3c;
+}
+
 /* Trackings modal */
 .users-modal-overlay {
   position: fixed;

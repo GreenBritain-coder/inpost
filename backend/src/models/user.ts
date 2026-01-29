@@ -79,6 +79,13 @@ export async function getAllUsers(): Promise<Array<{ id: number; email: string; 
   return result.rows;
 }
 
+/** Delete a user. Unlinks their trackings (sets user_id to NULL) then deletes the user. */
+export async function deleteUser(userId: number): Promise<boolean> {
+  await pool.query('UPDATE tracking_numbers SET user_id = NULL WHERE user_id = $1', [userId]);
+  const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [userId]);
+  return result.rowCount !== null && result.rowCount > 0;
+}
+
 /** Get Telegram chat ID for a user (for sending pickup notifications) */
 export async function getTelegramChatIdByUserId(userId: number): Promise<bigint | null> {
   const result = await pool.query(

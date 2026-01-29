@@ -21,7 +21,7 @@ import { updateAllTrackingStatuses, cleanupOldTrackingData } from '../services/s
 import { checkInPostStatus } from '../services/scraper';
 import { pool } from '../db/connection';
 import { verifyToken } from '../services/auth';
-import { findOrCreateUserByTelegramUserId, getAllUsers, getUserById, updateUserTelegramIdentity } from '../models/user';
+import { findOrCreateUserByTelegramUserId, getAllUsers, getUserById, updateUserTelegramIdentity, deleteUser } from '../models/user';
 import { getTelegramUsernameByUserId } from '../services/telegramService';
 
 const router = express.Router();
@@ -495,6 +495,23 @@ router.post('/users/:id/fetch-telegram-username', async (req: AuthRequest, res: 
     res.json({ username, user: updated });
   } catch (error) {
     console.error('Error fetching Telegram username:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    if (isNaN(userId)) {
+      return res.status(400).json({ error: 'Invalid user ID' });
+    }
+    const deleted = await deleteUser(userId);
+    if (!deleted) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json({ message: 'User deleted. Trackings linked to this user are now unassigned.' });
+  } catch (error) {
+    console.error('Error deleting user:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
