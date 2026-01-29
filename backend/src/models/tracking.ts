@@ -22,6 +22,8 @@ export interface TrackingNumber {
   custom_timestamp: Date | null;
   is_manual_status: boolean;
   trackingmore_status: string | null;
+  pickup_code: string | null;
+  locker_id: string | null;
   first_scanned_at: Date | null;
   created_at: Date;
   updated_at: Date;
