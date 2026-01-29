@@ -16,6 +16,8 @@ import {
   saveTrackingEvents,
 } from '../models/tracking';
 import { createBox, getAllBoxes, getBoxById, updateBox, deleteBox, getKingBoxes } from '../models/box';
+import { findOrCreateUserByTelegramUserId, getAllUsers, getUserById, updateUserTelegramIdentity } from '../models/user';
+import { getTelegramUsernameByUserId } from '../services/telegramService';
 import { getStatusHistory, getRecentStatusChanges, getRecentScannedChanges } from '../models/statusHistory';
 import { updateAllTrackingStatuses, cleanupOldTrackingData } from '../services/scheduler';
 import { checkInPostStatus } from '../services/scraper';
@@ -534,6 +536,8 @@ router.post(
   [
     body('tracking_number').notEmpty().trim(),
     body('box_id').optional().isInt(),
+    body('telegram_user_id').optional({ nullable: true }),
+    body('email_used').optional({ nullable: true }).trim(),
   ],
   async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
@@ -542,7 +546,7 @@ router.post(
     }
 
     try {
-      const { tracking_number, box_id } = req.body;
+      const { tracking_number, box_id, telegram_user_id, email_used } = req.body;
       
       // Validate box exists if provided
       if (box_id) {
@@ -552,7 +556,19 @@ router.post(
         }
       }
       
-      const tracking = await createTrackingNumber(tracking_number, box_id || null);
+      // If telegram_user_id is provided, find or create the user
+      let userId: number | null = null;
+      if (telegram_user_id != null && String(telegram_user_id).trim() !== '') {
+        userId = await findOrCreateUserByTelegramUserId(telegram_user_id);
+      }
+      
+      const tracking = await createTrackingNumber(
+        tracking_number,
+        box_id || null,
+        userId,
+        null, // telegram_chat_id - not provided in this form
+        email_used?.trim() || null
+      );
       res.status(201).json(tracking);
     } catch (error) {
       console.error('Error creating tracking number:', error);
@@ -889,8 +905,16 @@ router.patch(
       if (!updated) {
         return res.status(500).json({ error: 'Failed to update user Telegram identity' });
       }
-      const updatedUser = await getUserById(userId);
-      res.json(updatedUser);
+      // When a Telegram user ID was set in the request, auto-fetch username from Telegram (getChatMember) and save
+      if (telegram_user_id != null && String(telegram_user_id).trim() !== '') {
+        const tid = String(telegram_user_id).trim();
+        const fetchedUsername = await getTelegramUsernameByUserId(tid);
+        if (fetchedUsername != null) {
+          await updateUserTelegramIdentity(userId, fetchedUsername, tid);
+        }
+      }
+      const finalUser = await getUserById(userId);
+      res.json(finalUser);
     } catch (error) {
       console.error('Error updating user Telegram identity:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -898,8 +922,6 @@ router.patch(
   }
 );
 
-// Fetch Telegram username from Telegram API using user's telegram_user_id (getChatMember).
-// Only works if the user has started the bot (private chat exists). Optionally saves to user.
 router.post('/users/:id/fetch-telegram-username', async (req: AuthRequest, res: Response) => {
   try {
     const userId = parseInt(req.params.id, 10);
