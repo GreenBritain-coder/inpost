@@ -220,7 +220,25 @@ export const api = {
         'Content-Type': 'multipart/form-data',
       },
     }),
+
+  // Users (link Telegram from dashboard)
+  getUsers: () =>
+    axios.get<UserSummary[]>(`${API_URL}/tracking/users`),
+  updateUserTelegram: (
+    userId: number,
+    data: { telegram_user_id?: string | null; telegram_username?: string | null }
+  ) =>
+    axios.patch<UserSummary>(`${API_URL}/tracking/users/${userId}/telegram`, data),
 };
+
+export interface UserSummary {
+  id: number;
+  email: string;
+  created_at: string;
+  telegram_chat_id: string | null;
+  telegram_user_id: string | null;
+  telegram_username: string | null;
+}
 
 export interface CleanupLog {
   id: number;

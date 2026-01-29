@@ -18,7 +18,7 @@ import {
   saveTrackingEvents,
 } from '../models/tracking';
 import { createBox, getAllBoxes, getBoxById, updateBox, deleteBox, getKingBoxes } from '../models/box';
-import { updateUserTelegramIdentity, getUserById } from '../models/user';
+import { updateUserTelegramIdentity, getUserById, getAllUsers } from '../models/user';
 import { getStatusHistory, getRecentStatusChanges, getRecentScannedChanges } from '../models/statusHistory';
 import { updateAllTrackingStatuses, cleanupOldTrackingData } from '../services/scheduler';
 import { checkInPostEmails } from '../services/emailScraper';
@@ -1174,6 +1174,17 @@ router.patch(
     }
   }
 );
+
+// List users (for dashboard — link Telegram)
+router.get('/users', async (req: AuthRequest, res: Response) => {
+  try {
+    const users = await getAllUsers();
+    res.json(users);
+  } catch (error) {
+    console.error('Error listing users:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // Update a user's Telegram identity (for automatic linking when they /start the bot)
 // Set telegram_username (@username) or telegram_user_id (Telegram's from.id) so the bot can match them on /start

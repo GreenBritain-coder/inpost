@@ -71,6 +71,14 @@ export async function getUserById(userId: number): Promise<User | null> {
   return result.rows[0] ?? null;
 }
 
+/** List all users (for dashboard — no password) */
+export async function getAllUsers(): Promise<Array<{ id: number; email: string; created_at: Date; telegram_chat_id: string | null; telegram_user_id: string | null; telegram_username: string | null }>> {
+  const result = await pool.query(
+    'SELECT id, email, created_at, telegram_chat_id, telegram_user_id, telegram_username FROM users ORDER BY id'
+  );
+  return result.rows;
+}
+
 /** Get Telegram chat ID for a user (for sending pickup notifications) */
 export async function getTelegramChatIdByUserId(userId: number): Promise<bigint | null> {
   const result = await pool.query(

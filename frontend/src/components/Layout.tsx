@@ -51,6 +51,13 @@ export default function Layout({ children }: LayoutProps) {
               Upload CSV
             </Link>
             <Link
+              to="/users"
+              className={location.pathname === '/users' ? 'active' : ''}
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Link Telegram
+            </Link>
+            <Link
               to="/analytics"
               className={location.pathname === '/analytics' ? 'active' : ''}
               onClick={() => setMobileMenuOpen(false)}

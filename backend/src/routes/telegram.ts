@@ -267,12 +267,10 @@ async function processTelegramUpdate(update: any): Promise<void> {
       return;
     }
 
-    // 3) No match — show welcome and tell them to give their Telegram identity to admin
-    const hint = from?.username ? `@${from.username}` : (telegramUserId ? `Telegram ID: ${telegramUserId}` : 'your Telegram username');
+    // 3) No match — welcome and point them to /tracking (works if admin linked them via CSV or dashboard)
     const responseText = `👋 Welcome to InPost Tracking Bot (@GB_Track_Bot)\n\n` +
-      `To receive pickup codes here, your admin must add your Telegram identity to your user:\n\n` +
-      `Tell your admin: <code>${hint}</code>\n\n` +
-      `Once they add that to your user in the backend, open this bot again and tap Start — you'll be linked automatically.\n\n` +
+      `Tap <b>📦 My trackings</b> or send /tracking to see your trackings.\n\n` +
+      `If you don't see any, ask your admin for your personal link — they can link you when uploading trackings or from the dashboard.\n\n` +
       `Use the menu below:`;
 
     await sendTelegramMessage(chatId, responseText, true);
