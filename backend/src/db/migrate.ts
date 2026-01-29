@@ -178,6 +178,152 @@ async function migrate() {
       END $$;
     `);
 
+    // Add user_id column if it doesn't exist (link tracking to user)
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='tracking_numbers' AND column_name='user_id'
+        ) THEN
+          ALTER TABLE tracking_numbers ADD COLUMN user_id INTEGER;
+        END IF;
+      END $$;
+    `);
+
+    // Add telegram_chat_id column if it doesn't exist
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='tracking_numbers' AND column_name='telegram_chat_id'
+        ) THEN
+          ALTER TABLE tracking_numbers ADD COLUMN telegram_chat_id BIGINT;
+        END IF;
+      END $$;
+    `);
+
+    // Add email_used column if it doesn't exist
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='tracking_numbers' AND column_name='email_used'
+        ) THEN
+          ALTER TABLE tracking_numbers ADD COLUMN email_used VARCHAR(255);
+        END IF;
+      END $$;
+    `);
+
+    // Add pickup_code column if it doesn't exist
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='tracking_numbers' AND column_name='pickup_code'
+        ) THEN
+          ALTER TABLE tracking_numbers ADD COLUMN pickup_code VARCHAR(10);
+        END IF;
+      END $$;
+    `);
+
+    // Add locker_id column if it doesn't exist
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='tracking_numbers' AND column_name='locker_id'
+        ) THEN
+          ALTER TABLE tracking_numbers ADD COLUMN locker_id VARCHAR(50);
+        END IF;
+      END $$;
+    `);
+
+    // Add telegram_user_id and telegram_username to users table if they don't exist
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='users' AND column_name='telegram_chat_id'
+        ) THEN
+          ALTER TABLE users ADD COLUMN telegram_chat_id BIGINT;
+        END IF;
+      END $$;
+    `);
+
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='users' AND column_name='telegram_user_id'
+        ) THEN
+          ALTER TABLE users ADD COLUMN telegram_user_id BIGINT;
+        END IF;
+      END $$;
+    `);
+
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='users' AND column_name='telegram_username'
+        ) THEN
+          ALTER TABLE users ADD COLUMN telegram_username VARCHAR(255);
+        END IF;
+      END $$;
+    `);
+
+    // Add 'cancelled' status to the CHECK constraint for tracking_numbers.current_status
+    await pool.query(`
+      DO $$
+      BEGIN
+        -- Drop old constraint if it exists
+        IF EXISTS (
+          SELECT 1 FROM information_schema.table_constraints
+          WHERE table_name = 'tracking_numbers' AND constraint_name = 'tracking_numbers_current_status_check'
+        ) THEN
+          ALTER TABLE tracking_numbers DROP CONSTRAINT tracking_numbers_current_status_check;
+        END IF;
+        
+        -- Add new constraint with 'cancelled' status
+        ALTER TABLE tracking_numbers ADD CONSTRAINT tracking_numbers_current_status_check 
+          CHECK (current_status IN ('not_scanned', 'scanned', 'delivered', 'cancelled'));
+      EXCEPTION
+        WHEN duplicate_object THEN
+          -- Constraint already exists with correct definition, do nothing
+          NULL;
+      END $$;
+    `);
+
+    // Add 'cancelled' status to status_history CHECK constraint
+    await pool.query(`
+      DO $$
+      BEGIN
+        -- Drop old constraint if it exists
+        IF EXISTS (
+          SELECT 1 FROM information_schema.table_constraints
+          WHERE table_name = 'status_history' AND constraint_name = 'status_history_status_check'
+        ) THEN
+          ALTER TABLE status_history DROP CONSTRAINT status_history_status_check;
+        END IF;
+        
+        -- Add new constraint with 'cancelled' status
+        ALTER TABLE status_history ADD CONSTRAINT status_history_status_check 
+          CHECK (status IN ('not_scanned', 'scanned', 'delivered', 'cancelled'));
+      EXCEPTION
+        WHEN duplicate_object THEN
+          -- Constraint already exists with correct definition, do nothing
+          NULL;
+      END $$;
+    `);
+
     // Create status_history table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS status_history (
@@ -222,6 +368,11 @@ async function migrate() {
       CREATE INDEX IF NOT EXISTS idx_tracking_numbers_box_id ON tracking_numbers(box_id);
       CREATE INDEX IF NOT EXISTS idx_tracking_numbers_postbox_id ON tracking_numbers(postbox_id);
       CREATE INDEX IF NOT EXISTS idx_tracking_numbers_status ON tracking_numbers(current_status);
+      CREATE INDEX IF NOT EXISTS idx_tracking_numbers_user_id ON tracking_numbers(user_id);
+      CREATE INDEX IF NOT EXISTS idx_tracking_numbers_telegram_chat_id ON tracking_numbers(telegram_chat_id);
+      CREATE INDEX IF NOT EXISTS idx_tracking_numbers_email_used ON tracking_numbers(email_used) WHERE email_used IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_users_telegram_user_id ON users(telegram_user_id) WHERE telegram_user_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_users_telegram_chat_id ON users(telegram_chat_id) WHERE telegram_chat_id IS NOT NULL;
       CREATE INDEX IF NOT EXISTS idx_status_history_tracking_id ON status_history(tracking_number_id);
       CREATE INDEX IF NOT EXISTS idx_status_history_timestamp ON status_history(timestamp);
       CREATE INDEX IF NOT EXISTS idx_tracking_events_tracking_id ON tracking_events(tracking_number_id);
@@ -234,126 +385,6 @@ async function migrate() {
       UPDATE tracking_numbers 
       SET postbox_id = NULL 
       WHERE postbox_id IS NOT NULL
-    `);
-
-    // Add telegram_chat_id to users so we can send them pickup codes
-    await pool.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='telegram_chat_id') THEN
-          ALTER TABLE users ADD COLUMN telegram_chat_id BIGINT;
-        END IF;
-      END $$;
-    `);
-
-    // Telegram identity for automatic linking when user sends /start (no link needed)
-    await pool.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='telegram_user_id') THEN
-          ALTER TABLE users ADD COLUMN telegram_user_id BIGINT;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='telegram_username') THEN
-          ALTER TABLE users ADD COLUMN telegram_username VARCHAR(255);
-        END IF;
-      END $$;
-    `);
-
-    // Add email/telegram integration fields (if not exist)
-    await pool.query(`
-      DO $$ 
-      BEGIN
-        -- Add user/telegram fields for shipment creation
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='user_id') THEN
-          ALTER TABLE tracking_numbers ADD COLUMN user_id INTEGER;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='telegram_chat_id') THEN
-          ALTER TABLE tracking_numbers ADD COLUMN telegram_chat_id BIGINT;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='email_used') THEN
-          ALTER TABLE tracking_numbers ADD COLUMN email_used VARCHAR(255);
-        END IF;
-        
-        -- Add pickup code and locker fields from email extraction
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='pickup_code') THEN
-          ALTER TABLE tracking_numbers ADD COLUMN pickup_code VARCHAR(10);
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='locker_id') THEN
-          ALTER TABLE tracking_numbers ADD COLUMN locker_id VARCHAR(50);
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='pickup_code_sent_at') THEN
-          ALTER TABLE tracking_numbers ADD COLUMN pickup_code_sent_at TIMESTAMP;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='email_received_at') THEN
-          ALTER TABLE tracking_numbers ADD COLUMN email_received_at TIMESTAMP;
-        END IF;
-        
-        -- Add send code fields from sender/drop-off email extraction
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='send_code') THEN
-          ALTER TABLE tracking_numbers ADD COLUMN send_code VARCHAR(15);
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='send_code_sent_at') THEN
-          ALTER TABLE tracking_numbers ADD COLUMN send_code_sent_at TIMESTAMP;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='send_email_received_at') THEN
-          ALTER TABLE tracking_numbers ADD COLUMN send_email_received_at TIMESTAMP;
-        END IF;
-        
-        -- Add recipient name from sender email
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tracking_numbers' AND column_name='recipient_name') THEN
-          ALTER TABLE tracking_numbers ADD COLUMN recipient_name VARCHAR(255);
-        END IF;
-      END $$;
-    `);
-
-    // Create indexes for email matching
-    await pool.query(`
-      CREATE INDEX IF NOT EXISTS idx_tracking_number_lookup ON tracking_numbers(tracking_number);
-      CREATE INDEX IF NOT EXISTS idx_tracking_number_email ON tracking_numbers(tracking_number) WHERE email_used IS NOT NULL;
-    `);
-
-    // Add 'cancelled' status to tracking_numbers check constraint
-    // Using table_constraints (not constraint_column_usage) for proper constraint checking
-    await pool.query(`
-      DO $$ 
-      BEGIN
-        -- Drop old constraint if exists
-        IF EXISTS (
-          SELECT 1 FROM information_schema.table_constraints 
-          WHERE constraint_name = 'tracking_numbers_current_status_check'
-            AND table_name = 'tracking_numbers'
-            AND table_schema = 'public'
-        ) THEN
-          ALTER TABLE tracking_numbers DROP CONSTRAINT tracking_numbers_current_status_check;
-        END IF;
-        
-        -- Add new constraint with 'cancelled'
-        ALTER TABLE tracking_numbers 
-        ADD CONSTRAINT tracking_numbers_current_status_check 
-        CHECK (current_status IN ('not_scanned', 'scanned', 'delivered', 'cancelled'));
-      END $$;
-    `);
-
-    // Add 'cancelled' status to status_history check constraint
-    // Using table_constraints (not constraint_column_usage) for proper constraint checking
-    await pool.query(`
-      DO $$ 
-      BEGIN
-        -- Drop old constraint if exists
-        IF EXISTS (
-          SELECT 1 FROM information_schema.table_constraints 
-          WHERE constraint_name = 'status_history_status_check'
-            AND table_name = 'status_history'
-            AND table_schema = 'public'
-        ) THEN
-          ALTER TABLE status_history DROP CONSTRAINT status_history_status_check;
-        END IF;
-        
-        -- Add new constraint with 'cancelled'
-        ALTER TABLE status_history 
-        ADD CONSTRAINT status_history_status_check 
-        CHECK (status IN ('not_scanned', 'scanned', 'delivered', 'cancelled'));
-      END $$;
     `);
 
     console.log('Database migration completed successfully');
