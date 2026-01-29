@@ -612,6 +612,7 @@ router.post(
     body('box_id').optional().isInt(),
     body('telegram_user_id').optional({ nullable: true }),
     body('email_used').optional({ nullable: true }).trim(),
+    body('assign_to_user_id').optional().isInt(),
   ],
   async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
@@ -620,7 +621,7 @@ router.post(
     }
 
     try {
-      const { tracking_number, box_id, telegram_user_id, email_used } = req.body;
+      const { tracking_number, box_id, telegram_user_id, email_used, assign_to_user_id } = req.body;
 
       // Validate box exists if provided
       if (box_id) {
@@ -631,8 +632,22 @@ router.post(
       }
 
       let userId: number | null = null;
-      if (telegram_user_id != null && String(telegram_user_id).trim() !== '') {
-        userId = await findOrCreateUserByTelegramUserId(String(telegram_user_id).trim());
+      const tid = telegram_user_id != null && String(telegram_user_id).trim() !== ''
+        ? String(telegram_user_id).trim()
+        : null;
+
+      if (assign_to_user_id != null) {
+        // Link tracking to existing user; optionally set their Telegram ID
+        const existing = await getUserById(Number(assign_to_user_id));
+        if (!existing) {
+          return res.status(404).json({ error: 'User not found' });
+        }
+        userId = existing.id;
+        if (tid != null) {
+          await updateUserTelegramIdentity(userId, existing.telegram_username ?? null, tid);
+        }
+      } else if (tid != null) {
+        userId = await findOrCreateUserByTelegramUserId(tid);
       }
 
       const tracking = await createTrackingNumber(

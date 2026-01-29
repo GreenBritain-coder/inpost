@@ -122,13 +122,15 @@ export const api = {
     trackingNumber: string,
     boxId?: number,
     telegramUserId?: string | number,
-    emailUsed?: string
+    emailUsed?: string,
+    assignToUserId?: number
   ) =>
     axios.post<TrackingNumber>(`${API_URL}/tracking/numbers`, {
       tracking_number: trackingNumber,
       box_id: boxId,
       ...(telegramUserId != null && String(telegramUserId).trim() !== '' && { telegram_user_id: String(telegramUserId).trim() }),
       email_used: emailUsed,
+      ...(assignToUserId != null && { assign_to_user_id: assignToUserId }),
     }),
   bulkCreateTrackingNumbers: (trackingNumbers: string[], boxId?: number, customTimestamp?: string | null) =>
     axios.post(`${API_URL}/tracking/numbers/bulk`, {

@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { api, Box } from '../api/api';
+import { api, Box, UserSummary } from '../api/api';
 import './AddTracking.css';
 
 export default function AddTracking() {
   const [boxes, setBoxes] = useState<Box[]>([]);
   const [kingBoxes, setKingBoxes] = useState<Box[]>([]);
+  const [users, setUsers] = useState<UserSummary[]>([]);
   const [selectedBox, setSelectedBox] = useState<number | null>(null);
+  const [assignToUserId, setAssignToUserId] = useState<number | null>(null);
   const [newBoxName, setNewBoxName] = useState('');
   const [newBoxIsKingBox, setNewBoxIsKingBox] = useState(false);
   const [newBoxParentId, setNewBoxParentId] = useState<number | null>(null);
@@ -25,7 +27,17 @@ export default function AddTracking() {
   useEffect(() => {
     loadBoxes();
     loadKingBoxes();
+    loadUsers();
   }, []);
+
+  const loadUsers = async () => {
+    try {
+      const res = await api.getUsers();
+      setUsers(res.data);
+    } catch {
+      setUsers([]);
+    }
+  };
 
   const loadBoxes = async () => {
     try {
@@ -127,7 +139,7 @@ export default function AddTracking() {
   const handleSingleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!trackingNumber.trim()) return;
-    if (!telegramUserId.trim()) return;
+    if (!telegramUserId.trim() && !assignToUserId) return;
 
     setLoading(true);
     setMessage(null);
@@ -137,11 +149,13 @@ export default function AddTracking() {
         trackingNumber.trim(),
         selectedBox || undefined,
         telegramUserId.trim() || undefined,
-        emailUsed.trim() || undefined
+        emailUsed.trim() || undefined,
+        assignToUserId ?? undefined
       );
       setTrackingNumber('');
       setTelegramUserId('');
       setEmailUsed('');
+      setAssignToUserId(null);
       setMessage({ type: 'success', text: 'Tracking number added successfully' });
     } catch (error: any) {
       setMessage({
@@ -414,16 +428,38 @@ export default function AddTracking() {
             />
           </div>
           <div className="form-group">
-            <label htmlFor="telegram-user-id">Telegram User ID <span className="required">*</span></label>
+            <label htmlFor="assign-to-user">Link to existing user (optional)</label>
+            <select
+              id="assign-to-user"
+              value={assignToUserId ?? ''}
+              onChange={(e) => setAssignToUserId(e.target.value ? parseInt(e.target.value) : null)}
+            >
+              <option value="">— None (create/find by Telegram ID below) —</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  User {u.id}
+                  {u.telegram_user_id ? ` · ${u.telegram_user_id}` : ' (no Telegram ID)'}
+                  {u.telegram_username ? ` · ${u.telegram_username}` : ''}
+                </option>
+              ))}
+            </select>
+            <small>Select an existing user to link this tracking to and optionally set their Telegram ID below.</small>
+          </div>
+          <div className="form-group">
+            <label htmlFor="telegram-user-id">Telegram User ID {!assignToUserId && <span className="required">*</span>}</label>
             <input
               type="text"
               id="telegram-user-id"
               value={telegramUserId}
               onChange={(e) => setTelegramUserId(e.target.value)}
               placeholder="e.g. 7744334263"
-              required
+              required={!assignToUserId}
             />
-            <small>Telegram's numeric user ID (required for linking trackings to users)</small>
+            <small>
+              {assignToUserId
+                ? 'If you selected an existing user above, enter their Telegram ID here to set it on that user.'
+                : "Telegram's numeric user ID (required for linking trackings to users)"}
+            </small>
           </div>
           <div className="form-group">
             <label htmlFor="email-used">Email Used (optional)</label>
