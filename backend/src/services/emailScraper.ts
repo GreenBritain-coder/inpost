@@ -429,6 +429,11 @@ async function processEmail(emailText: string, emailHtml: string, emailSubject: 
     
     if (match.pickup_code_sent_at) {
       console.log(`[Email Scraper] Pickup code already sent for ${trackingNumber} at ${match.pickup_code_sent_at}, skipping duplicate`);
+      // Still save locker_id if we have it (so location shows in dashboard and Telegram bot)
+      if (lockerId) {
+        await updateTrackingWithPickupCode(match.tracking_id, pickupCode, lockerId);
+        console.log(`[Email Scraper] ✅ Updated pickup location for ${trackingNumber} (already sent, location saved)`);
+      }
     } else {
       await updateTrackingWithPickupCode(match.tracking_id, pickupCode, lockerId);
 

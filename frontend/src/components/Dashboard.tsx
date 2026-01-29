@@ -47,6 +47,7 @@ export default function Dashboard() {
   const [trackingEvents, setTrackingEvents] = useState<TrackingEvent[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [checkingEmails, setCheckingEmails] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -226,6 +227,19 @@ export default function Dashboard() {
     }
   };
 
+  const handleCheckEmails = async () => {
+    try {
+      setCheckingEmails(true);
+      await api.checkEmails();
+      alert('Email check completed! Pickup codes and locations have been updated. Refreshing data...');
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to check emails');
+    } finally {
+      setCheckingEmails(false);
+    }
+  };
+
 
   const handleStatusChange = async (
     id: number, 
@@ -290,6 +304,14 @@ export default function Dashboard() {
               🗑️ Delete Selected ({selectedIds.size})
             </button>
           )}
+          <button
+            onClick={handleCheckEmails}
+            disabled={checkingEmails}
+            className="refresh-btn"
+            style={{ marginRight: '0.5rem' }}
+          >
+            {checkingEmails ? 'Checking...' : '📧 Check Emails'}
+          </button>
           <button
             onClick={handleRefresh}
             disabled={refreshing}

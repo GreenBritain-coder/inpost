@@ -20,6 +20,7 @@ import {
 import { createBox, getAllBoxes, getBoxById, updateBox, deleteBox, getKingBoxes } from '../models/box';
 import { getStatusHistory, getRecentStatusChanges, getRecentScannedChanges } from '../models/statusHistory';
 import { updateAllTrackingStatuses, cleanupOldTrackingData } from '../services/scheduler';
+import { checkInPostEmails } from '../services/emailScraper';
 import { checkInPostStatus } from '../services/scraper';
 import { pool } from '../db/connection';
 import { verifyToken } from '../services/auth';
@@ -1011,6 +1012,22 @@ router.post('/cleanup', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Error starting manual cleanup:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Manual email check - trigger InPost email scan (pickup codes, locations)
+router.post('/check-emails', async (req: AuthRequest, res: Response) => {
+  try {
+    await checkInPostEmails();
+    res.json({
+      message: 'Email check completed. Check logs for details.',
+    });
+  } catch (error) {
+    console.error('Error running email check:', error);
+    res.status(500).json({
+      error: 'Failed to run email check',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
   }
 });
 

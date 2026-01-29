@@ -174,6 +174,9 @@ export const api = {
   refreshTrackingStatuses: () => axios.post(`${API_URL}/tracking/refresh`),
   refreshTrackingNumber: (id: number) =>
     axios.post<{ message: string; tracking: TrackingNumber }>(`${API_URL}/tracking/numbers/${id}/refresh`),
+  
+  // Check emails for pickup codes and locations
+  checkEmails: () => axios.post(`${API_URL}/tracking/check-emails`),
 
   // Logs
   getStatusChangeLogs: (
