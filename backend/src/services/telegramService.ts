@@ -20,7 +20,7 @@ export async function sendPickupCodeToTelegram(
   const message = `📦 Your InPost parcel is ready for pickup!\n\n` +
     `Tracking: ${trackingNumber}\n` +
     `Pickup Code: ${pickupCode}\n` +
-    (lockerId ? `Locker: ${lockerId}\n` : '') +
+    (lockerId ? `Location: ${lockerId}\n` : '') +
     `\nYou have 48 hours to collect your parcel.`;
 
   try {

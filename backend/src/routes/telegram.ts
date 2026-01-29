@@ -168,7 +168,7 @@ async function processTelegramUpdate(update: any): Promise<void> {
         if (row.pickup_code) {
           responseText += `   ✅ Pickup Code: <code>${row.pickup_code}</code>\n`;
           if (row.locker_id) {
-            responseText += `   📍 Locker: ${row.locker_id}\n`;
+            responseText += `   📍 Location: ${row.locker_id}\n`;
           }
           if (row.pickup_code_sent_at) {
             const sentDate = new Date(row.pickup_code_sent_at);
@@ -222,7 +222,7 @@ async function processTelegramUpdate(update: any): Promise<void> {
       if (row.pickup_code) {
         responseText += `✅ <b>Pickup Code: <code>${row.pickup_code}</code></b>\n`;
         if (row.locker_id) {
-          responseText += `📍 Locker: ${row.locker_id}\n`;
+          responseText += `📍 Location: ${row.locker_id}\n`;
         }
         if (row.pickup_code_sent_at) {
           const sentDate = new Date(row.pickup_code_sent_at);
