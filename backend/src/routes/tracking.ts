@@ -21,6 +21,8 @@ import { updateAllTrackingStatuses, cleanupOldTrackingData } from '../services/s
 import { checkInPostStatus } from '../services/scraper';
 import { pool } from '../db/connection';
 import { verifyToken } from '../services/auth';
+import { getUserById } from '../models/user';
+import { updateTrackingNumberUser } from '../models/tracking';
 
 const router = express.Router();
 
@@ -714,42 +716,6 @@ router.patch(
       res.json(updated);
     } catch (error) {
       console.error('Error updating tracking number box:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  }
-);
-
-// Update user for existing tracking number
-router.patch(
-  '/numbers/:id/user',
-  [body('user_id').optional({ nullable: true }).isInt()],
-  async (req: AuthRequest, res: Response) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    try {
-      const { id } = req.params;
-      const { user_id } = req.body;
-      
-      // Validate user exists if provided
-      if (user_id) {
-        const user = await getUserById(Number(user_id));
-        if (!user) {
-          return res.status(404).json({ error: 'User not found' });
-        }
-      }
-      
-      const tracking = await getTrackingNumberById(Number(id));
-      if (!tracking) {
-        return res.status(404).json({ error: 'Tracking number not found' });
-      }
-
-      const updated = await updateTrackingNumberUser(Number(id), user_id || null);
-      res.json(updated);
-    } catch (error) {
-      console.error('Error updating tracking number user:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
