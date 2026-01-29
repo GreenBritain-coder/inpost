@@ -16,7 +16,6 @@ import {
   saveTrackingEvents,
 } from '../models/tracking';
 import { createBox, getAllBoxes, getBoxById, updateBox, deleteBox, getKingBoxes } from '../models/box';
-import { findOrCreateUserByTelegramUserId } from '../models/user';
 import { getStatusHistory, getRecentStatusChanges, getRecentScannedChanges } from '../models/statusHistory';
 import { updateAllTrackingStatuses, cleanupOldTrackingData } from '../services/scheduler';
 import { checkInPostStatus } from '../services/scraper';
@@ -855,7 +854,7 @@ router.get('/logs/status-changes', async (req: AuthRequest, res: Response) => {
   try {
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
     const changeType = req.query.changeType as 'status_change' | 'details_update' | undefined;
-    const status = req.query.status as 'not_scanned' | 'scanned' | 'delivered' | undefined;
+    const status = req.query.status as 'not_scanned' | 'scanned' | 'delivered' | 'cancelled' | undefined;
     const boxId = req.query.boxId ? parseInt(req.query.boxId as string) : undefined;
     const trackingNumber = req.query.trackingNumber as string | undefined;
     
