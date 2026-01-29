@@ -11,8 +11,6 @@ export default function AddTracking() {
   const [newBoxParentId, setNewBoxParentId] = useState<number | null>(null);
   const [showNewBox, setShowNewBox] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState('');
-  const [userId, setUserId] = useState('');
-  const [telegramChatId, setTelegramChatId] = useState('');
   const [emailUsed, setEmailUsed] = useState('');
   const [bulkTrackingNumbers, setBulkTrackingNumbers] = useState('');
   const [bulkCustomTimestamp, setBulkCustomTimestamp] = useState('');
@@ -136,13 +134,11 @@ export default function AddTracking() {
       await api.createTrackingNumber(
         trackingNumber.trim(), 
         selectedBox || undefined,
-        userId ? parseInt(userId) : undefined,
-        telegramChatId ? parseInt(telegramChatId) : undefined,
+        undefined,
+        undefined,
         emailUsed.trim() || undefined
       );
       setTrackingNumber('');
-      setUserId('');
-      setTelegramChatId('');
       setEmailUsed('');
       setMessage({ type: 'success', text: 'Tracking number added successfully' });
     } catch (error: any) {
@@ -414,28 +410,6 @@ export default function AddTracking() {
               placeholder="Enter tracking number"
               required
             />
-          </div>
-          <div className="form-group">
-            <label htmlFor="user-id">User ID (optional)</label>
-            <input
-              type="number"
-              id="user-id"
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-              placeholder="e.g., 1"
-            />
-            <small>Internal user ID for this tracking number</small>
-          </div>
-          <div className="form-group">
-            <label htmlFor="telegram-chat-id">Telegram Chat ID (optional)</label>
-            <input
-              type="number"
-              id="telegram-chat-id"
-              value={telegramChatId}
-              onChange={(e) => setTelegramChatId(e.target.value)}
-              placeholder="e.g., 7744334263"
-            />
-            <small>Recipient's Telegram chat ID to receive pickup codes</small>
           </div>
           <div className="form-group">
             <label htmlFor="email-used">Email Used (optional)</label>
