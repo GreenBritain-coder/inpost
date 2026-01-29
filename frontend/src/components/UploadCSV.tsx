@@ -71,7 +71,8 @@ export default function UploadCSV() {
   };
 
   const downloadTemplate = () => {
-    const template = 'user_id,tracking_number,telegram_chat_id,email_used\n7744334263,JJD0002233573349153,,user@example.com\n8899445511,MD000000867865453,,';
+    // Template with all optional fields - users can remove columns they don't need
+    const template = 'tracking_number,user_id,telegram_chat_id,email_used\nJJD0002233573349153,7744334263,,\nMD000000867865453,8899445511,,';
     const blob = new Blob([template], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -92,18 +93,23 @@ export default function UploadCSV() {
 
       <div className="upload-instructions">
         <h3>CSV Format</h3>
-        <p>Your CSV file should have the following columns (header row required). The system will automatically find or create users based on the <strong>user_id</strong> (Telegram user ID):</p>
+        <p><strong>Required column:</strong> <code>tracking_number</code> - InPost tracking number</p>
+        <p><strong>Optional columns:</strong></p>
         <ul>
-          <li><strong>tracking_number</strong> (required) - InPost tracking number</li>
-          <li><strong>user_id</strong> (optional) - <strong>Telegram user ID</strong> (Telegram's numeric ID, e.g., 7744334263). The system will find or create a user with this Telegram ID and link the tracking to them.</li>
-          <li><strong>telegram_chat_id</strong> (optional) - Only if you need manual chat linking.</li>
-          <li><strong>email_used</strong> (optional) - Email address used for this tracking</li>
+          <li><strong>user_id</strong> - <strong>Telegram user ID</strong> (Telegram's numeric ID, e.g., 7744334263). If provided, the system will find or create a user with this Telegram ID and link the tracking to them. If omitted, tracking will be created without a user assignment.</li>
+          <li><strong>telegram_chat_id</strong> - Only needed for manual chat linking (rarely used)</li>
+          <li><strong>email_used</strong> - Email address used for this tracking</li>
         </ul>
         <p className="example-note">
-          <strong>Note:</strong> <code>user_id</code> in CSV is treated as <strong>Telegram user ID</strong> (not database user ID). 
+          <strong>Note:</strong> Only <code>tracking_number</code> is required. All other fields are optional. 
+          If you provide <code>user_id</code>, it's treated as <strong>Telegram user ID</strong> (not database user ID). 
           The system automatically creates users if they don't exist. After upload, you'll get <code>/start</code> links using database user IDs to share with users.
         </p>
-        <p className="example-note">Example: <code>user_id,tracking_number</code> — <code>7744334263,JJD0002233573349153</code></p>
+        <p className="example-note">
+          <strong>Examples:</strong><br/>
+          Minimal: <code>tracking_number</code> — <code>JJD0002233573349153</code><br/>
+          With user: <code>user_id,tracking_number</code> — <code>7744334263,JJD0002233573349153</code>
+        </p>
       </div>
 
       <div className="upload-area">

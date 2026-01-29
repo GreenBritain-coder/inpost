@@ -712,13 +712,16 @@ router.post(
 );
 
 // CSV Upload endpoint: POST /api/tracking/numbers/upload-csv
-// Expected CSV format: user_id,tracking_number[,telegram_chat_id][,email_used]
+// Required CSV format: tracking_number
+// Optional columns: user_id (Telegram user ID), telegram_chat_id, email_used
 // Note: user_id in CSV is treated as Telegram user ID (not database user ID)
-// The system will find or create a user with that Telegram user ID
-// Example:
-// user_id,tracking_number
+// The system will find or create a user with that Telegram user ID if provided
+// Examples:
+// Minimal (tracking only): tracking_number
+// JJD0002233573349153
+// 
+// With user: user_id,tracking_number
 // 7744334263,JJD0002233573349153
-// 8899445511,MD000000867865453
 router.post(
   '/numbers/upload-csv',
   upload.single('file'),
@@ -768,9 +771,10 @@ router.post(
       const createdUserIds = new Set<number>();
 
       for (const record of records) {
-        const trackingNumber = record.tracking_number?.trim();
-        // user_id in CSV is treated as Telegram user ID
+        const trackingNumber = record.tracking_number?.trim() || '';
+        // user_id in CSV is treated as Telegram user ID (optional)
         const telegramUserIdRaw = record.user_id != null && record.user_id !== '' ? String(record.user_id).trim() : null;
+        // telegram_chat_id is optional - only needed for manual chat linking
         const telegramChatId = record.telegram_chat_id ? BigInt(record.telegram_chat_id) : null;
         const emailUsed = record.email_used?.trim() || null;
 

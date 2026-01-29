@@ -53,7 +53,7 @@ export interface ScannedChangeLog {
 export async function getRecentStatusChanges(
   limit: number = 50,
   changeType?: 'status_change' | 'details_update',
-  status?: 'not_scanned' | 'scanned' | 'delivered',
+  status?: 'not_scanned' | 'scanned' | 'delivered' | 'cancelled',
   boxId?: number,
   trackingNumberSearch?: string
 ): Promise<StatusChangeLog[]> {
