@@ -202,15 +202,18 @@ export default function Users() {
         </table>
       </div>
 
-      {trackingsModalUser && (
+      {trackingsModalUser && (() => {
+        // Use current user from list so modal shows updated ID/username after Fetch username or Edit
+        const currentUser = users.find((x) => x.id === trackingsModalUser.id) ?? trackingsModalUser;
+        return (
         <div className="users-modal-overlay" onClick={closeTrackingsModal} role="presentation">
           <div className="users-modal" onClick={(e) => e.stopPropagation()}>
             <div className="users-modal-header">
               <h3>Trackings linked to user</h3>
               <p className="users-modal-subtitle">
-                User ID {trackingsModalUser.id}
-                {trackingsModalUser.telegram_user_id && ` · Telegram ${trackingsModalUser.telegram_user_id}`}
-                {trackingsModalUser.telegram_username && ` · @${trackingsModalUser.telegram_username.replace(/^@/, '')}`}
+                User ID {currentUser.id}
+                {currentUser.telegram_user_id && ` · Telegram ${currentUser.telegram_user_id}`}
+                {currentUser.telegram_username && ` · @${currentUser.telegram_username.replace(/^@/, '')}`}
               </p>
               <button type="button" onClick={closeTrackingsModal} className="users-modal-close" aria-label="Close">
                 ×
@@ -234,7 +237,8 @@ export default function Users() {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

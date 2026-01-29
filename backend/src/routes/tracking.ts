@@ -16,8 +16,6 @@ import {
   saveTrackingEvents,
 } from '../models/tracking';
 import { createBox, getAllBoxes, getBoxById, updateBox, deleteBox, getKingBoxes } from '../models/box';
-import { findOrCreateUserByTelegramUserId, getAllUsers, getUserById, updateUserTelegramIdentity } from '../models/user';
-import { getTelegramUsernameByUserId } from '../services/telegramService';
 import { getStatusHistory, getRecentStatusChanges, getRecentScannedChanges } from '../models/statusHistory';
 import { updateAllTrackingStatuses, cleanupOldTrackingData } from '../services/scheduler';
 import { checkInPostStatus } from '../services/scraper';
@@ -536,8 +534,6 @@ router.post(
   [
     body('tracking_number').notEmpty().trim(),
     body('box_id').optional().isInt(),
-    body('telegram_user_id').optional({ nullable: true }),
-    body('email_used').optional({ nullable: true }).trim(),
   ],
   async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
@@ -546,7 +542,7 @@ router.post(
     }
 
     try {
-      const { tracking_number, box_id, telegram_user_id, email_used } = req.body;
+      const { tracking_number, box_id } = req.body;
       
       // Validate box exists if provided
       if (box_id) {
@@ -556,19 +552,7 @@ router.post(
         }
       }
       
-      // If telegram_user_id is provided, find or create the user
-      let userId: number | null = null;
-      if (telegram_user_id != null && String(telegram_user_id).trim() !== '') {
-        userId = await findOrCreateUserByTelegramUserId(telegram_user_id);
-      }
-      
-      const tracking = await createTrackingNumber(
-        tracking_number,
-        box_id || null,
-        userId,
-        null, // telegram_chat_id - not provided in this form
-        email_used?.trim() || null
-      );
+      const tracking = await createTrackingNumber(tracking_number, box_id || null);
       res.status(201).json(tracking);
     } catch (error) {
       console.error('Error creating tracking number:', error);
@@ -910,7 +894,10 @@ router.patch(
         const tid = String(telegram_user_id).trim();
         const fetchedUsername = await getTelegramUsernameByUserId(tid);
         if (fetchedUsername != null) {
-          await updateUserTelegramIdentity(userId, fetchedUsername, tid);
+          const saved = await updateUserTelegramIdentity(userId, fetchedUsername, tid);
+          if (!saved) {
+            return res.status(500).json({ error: 'Failed to save fetched Telegram username' });
+          }
         }
       }
       const finalUser = await getUserById(userId);
@@ -938,11 +925,12 @@ router.post('/users/:id/fetch-telegram-username', async (req: AuthRequest, res: 
     }
     const username = await getTelegramUsernameByUserId(telegramUserId);
     if (username != null) {
-      await updateUserTelegramIdentity(userId, username, telegramUserId);
+      const saved = await updateUserTelegramIdentity(userId, username, telegramUserId);
+      if (!saved) {
+        return res.status(500).json({ error: 'Failed to save fetched Telegram username' });
+      }
     }
     const updatedUser = await getUserById(userId);
-    // Return only the fetched username (no DB fallback) so the frontend can distinguish
-    // fetch success (username set) from fetch failure (username null → show error, don't reload).
     return res.json({
       username: username ?? null,
       user: updatedUser,
