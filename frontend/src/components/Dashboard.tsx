@@ -247,7 +247,7 @@ export default function Dashboard() {
 
   const handleStatusChange = async (
     id: number, 
-    newStatus: 'not_scanned' | 'scanned' | 'delivered',
+    newStatus: 'not_scanned' | 'scanned' | 'delivered' | 'cancelled',
     timestamp?: string | null
   ) => {
     try {
