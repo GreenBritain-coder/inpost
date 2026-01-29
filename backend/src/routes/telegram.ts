@@ -99,6 +99,15 @@ function getStatusEmoji(status: string): string {
   }
 }
 
+/** User-friendly status label for end users (scanned + pickup code = "Ready for pickup") */
+function getStatusLabelForUser(currentStatus: string, hasPickupCode: boolean): string {
+  if (currentStatus === 'scanned' && hasPickupCode) return 'Ready for pickup';
+  if (currentStatus === 'scanned') return 'In transit';
+  if (currentStatus === 'not_scanned') return 'In transit';
+  if (currentStatus === 'delivered') return 'Delivered';
+  return currentStatus;
+}
+
 /** Telegram "from" object (id and optional username) for identity lookup */
 interface TelegramFrom {
   id?: number;
@@ -161,7 +170,7 @@ async function sendTrackingResponse(
     let text = `📦 Your Tracking Numbers (${result.rows.length})\n\n`;
     for (const row of result.rows) {
       text += `🔹 <b>${row.tracking_number}</b>\n`;
-      text += `   Status: ${getStatusEmoji(row.current_status)} ${row.current_status}\n`;
+      text += `   Status: ${getStatusEmoji(row.current_status)} ${getStatusLabelForUser(row.current_status, !!row.pickup_code)}\n`;
       if (row.pickup_code) {
         text += `   ✅ Pickup Code: <code>${row.pickup_code}</code>\n`;
         if (row.locker_id) text += `   📍 Location: ${row.locker_id}\n`;
@@ -328,7 +337,7 @@ async function processTelegramUpdate(update: any): Promise<void> {
 
       const row = result.rows[0];
       let responseText = `📦 Tracking: <code>${row.tracking_number}</code>\n\n`;
-      responseText += `Status: ${getStatusEmoji(row.current_status)} ${row.current_status}\n\n`;
+      responseText += `Status: ${getStatusEmoji(row.current_status)} ${getStatusLabelForUser(row.current_status, !!row.pickup_code)}\n\n`;
 
       if (row.pickup_code) {
         responseText += `✅ <b>Pickup Code: <code>${row.pickup_code}</code></b>\n`;
