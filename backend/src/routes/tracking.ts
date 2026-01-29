@@ -16,6 +16,7 @@ import {
   saveTrackingEvents,
 } from '../models/tracking';
 import { createBox, getAllBoxes, getBoxById, updateBox, deleteBox, getKingBoxes } from '../models/box';
+import { getAllUsers, getUserById, updateUserTelegramIdentity } from '../models/user';
 import { getStatusHistory, getRecentStatusChanges, getRecentScannedChanges } from '../models/statusHistory';
 import { updateAllTrackingStatuses, cleanupOldTrackingData } from '../services/scheduler';
 import { checkInPostStatus } from '../services/scraper';
@@ -850,12 +851,61 @@ router.patch(
   }
 );
 
+// Users (Link Telegram from dashboard) — protected by router.use(authenticate) above
+router.get('/users', async (req: AuthRequest, res: Response) => {
+  try {
+    const users = await getAllUsers();
+    res.json(users);
+  } catch (error) {
+    console.error('Error listing users:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch(
+  '/users/:id/telegram',
+  [
+    body('telegram_username').optional({ nullable: true }).trim(),
+    body('telegram_user_id').optional({ nullable: true }),
+  ],
+  async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    try {
+      const userId = parseInt(req.params.id, 10);
+      if (isNaN(userId)) {
+        return res.status(400).json({ error: 'Invalid user ID' });
+      }
+      const user = await getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      const { telegram_username, telegram_user_id } = req.body;
+      const updated = await updateUserTelegramIdentity(
+        userId,
+        telegram_username ?? null,
+        telegram_user_id ?? null
+      );
+      if (!updated) {
+        return res.status(500).json({ error: 'Failed to update user Telegram identity' });
+      }
+      const updatedUser = await getUserById(userId);
+      res.json(updatedUser);
+    } catch (error) {
+      console.error('Error updating user Telegram identity:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
 // Logs endpoints
 router.get('/logs/status-changes', async (req: AuthRequest, res: Response) => {
   try {
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
     const changeType = req.query.changeType as 'status_change' | 'details_update' | undefined;
-    const status = req.query.status as 'not_scanned' | 'scanned' | 'delivered' | undefined;
+    const status = req.query.status as 'not_scanned' | 'scanned' | 'delivered' | 'cancelled' | undefined;
     const boxId = req.query.boxId ? parseInt(req.query.boxId as string) : undefined;
     const trackingNumber = req.query.trackingNumber as string | undefined;
     
