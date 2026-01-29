@@ -16,7 +16,6 @@ import {
   saveTrackingEvents,
 } from '../models/tracking';
 import { createBox, getAllBoxes, getBoxById, updateBox, deleteBox, getKingBoxes } from '../models/box';
-import { getAllUsers, getUserById, updateUserTelegramIdentity, findOrCreateUserByTelegramUserId } from '../models/user';
 import { getStatusHistory, getRecentStatusChanges, getRecentScannedChanges } from '../models/statusHistory';
 import { updateAllTrackingStatuses, cleanupOldTrackingData } from '../services/scheduler';
 import { checkInPostStatus } from '../services/scraper';
@@ -530,17 +529,11 @@ router.get('/numbers/:id/events', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// POST /numbers — create a tracking number.
-// User linking: provide exactly one of user_id (database user id) or telegram_user_id (Telegram from.id). If both provided, returns 400.
 router.post(
   '/numbers',
   [
     body('tracking_number').notEmpty().trim(),
     body('box_id').optional().isInt(),
-    body('user_id').optional().isInt(),
-    body('telegram_user_id').optional(),
-    body('telegram_chat_id').optional().isInt().toInt(),
-    body('email_used').optional().isEmail().normalizeEmail(),
   ],
   async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
@@ -549,45 +542,17 @@ router.post(
     }
 
     try {
-      const { tracking_number, box_id, user_id, telegram_user_id, telegram_chat_id, email_used } = req.body;
-      const hasUserId = user_id != null;
-      const hasTelegramUserId = telegram_user_id != null && String(telegram_user_id).trim() !== '';
-
-      if (hasUserId && hasTelegramUserId) {
-        return res.status(400).json({
-          error: 'Provide either user_id or telegram_user_id, not both.',
-          details: 'Use user_id for an existing database user id, or telegram_user_id (Telegram from.id) to link by Telegram identity.',
-        });
-      }
-
+      const { tracking_number, box_id } = req.body;
+      
+      // Validate box exists if provided
       if (box_id) {
         const box = await getBoxById(box_id);
         if (!box) {
           return res.status(404).json({ error: 'Box not found' });
         }
       }
-
-      let databaseUserId: number | null = null;
-      if (hasTelegramUserId) {
-        try {
-          databaseUserId = await findOrCreateUserByTelegramUserId(String(telegram_user_id).trim());
-        } catch (e) {
-          return res.status(400).json({
-            error: 'Failed to find/create user for Telegram User ID',
-            details: e instanceof Error ? e.message : 'Unknown error',
-          });
-        }
-      } else if (hasUserId) {
-        databaseUserId = user_id;
-      }
-
-      const tracking = await createTrackingNumber(
-        tracking_number,
-        box_id || null,
-        databaseUserId,
-        telegram_chat_id || null,
-        email_used || null
-      );
+      
+      const tracking = await createTrackingNumber(tracking_number, box_id || null);
       res.status(201).json(tracking);
     } catch (error) {
       console.error('Error creating tracking number:', error);
@@ -884,7 +849,7 @@ router.patch(
   }
 );
 
-// Users (Link Telegram from dashboard)
+// Users (Link Telegram from dashboard) — protected by router.use(authenticate) above
 router.get('/users', async (req: AuthRequest, res: Response) => {
   try {
     const users = await getAllUsers();
