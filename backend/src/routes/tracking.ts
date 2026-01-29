@@ -435,6 +435,7 @@ router.get('/numbers', async (req: AuthRequest, res: Response) => {
     const trackingNumberSearch = req.query.trackingNumber as string | undefined;
     const unassignedOnly = req.query.unassignedOnly === 'true';
     const kingBoxId = req.query.kingBoxId ? parseInt(req.query.kingBoxId as string) : undefined;
+    const userId = req.query.userId ? parseInt(req.query.userId as string) : undefined;
     
     // Validate status if provided
     if (status && !['not_scanned', 'scanned', 'delivered'].includes(status)) {
@@ -450,7 +451,7 @@ router.get('/numbers', async (req: AuthRequest, res: Response) => {
     // Otherwise, use getAllTrackingNumbers with optional kingBoxId filter
     const result = boxId
       ? await getTrackingNumbersByBox(boxId, page, limit, status, customTimestamp, search || trackingNumberSearch)
-      : await getAllTrackingNumbers(page, limit, status, customTimestamp, search || trackingNumberSearch, unassignedOnly, kingBoxId || null);
+      : await getAllTrackingNumbers(page, limit, status, customTimestamp, search || trackingNumberSearch, unassignedOnly, kingBoxId || null, userId || null);
     res.json(result);
   } catch (error) {
     console.error('Error fetching tracking numbers:', error);
@@ -1092,5 +1093,6 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
 });
 
 export default router;
+
 
 
