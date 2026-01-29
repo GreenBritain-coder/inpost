@@ -572,9 +572,25 @@ router.post(
         }
       } else if (telegram_user_id) {
         // No user selected, but telegram_user_id provided - find or create user
-        const { findOrCreateUserByTelegramUserId } = await import('../models/user');
+        const { findOrCreateUserByTelegramUserId, getUserById, updateUserTelegramIdentity } = await import('../models/user');
         userId = await findOrCreateUserByTelegramUserId(telegram_user_id);
         console.log(`Found or created user ${userId} for telegram_user_id: ${telegram_user_id}`);
+        
+        // Auto-fetch Telegram username if not already set
+        try {
+          const user = await getUserById(userId);
+          if (user && !user.telegram_username) {
+            const { getTelegramUsernameByUserId } = await import('../services/telegramService');
+            const username = await getTelegramUsernameByUserId(telegram_user_id);
+            if (username) {
+              await updateUserTelegramIdentity(userId, username, telegram_user_id);
+              console.log(`Auto-fetched Telegram username ${username} for user ${userId}`);
+            }
+          }
+        } catch (fetchError) {
+          console.log(`Could not auto-fetch Telegram username for user ${userId}:`, fetchError);
+          // Non-fatal - continue without username
+        }
       }
       
       const tracking = await createTrackingNumber(
@@ -1093,6 +1109,7 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
 });
 
 export default router;
+
 
 
 
