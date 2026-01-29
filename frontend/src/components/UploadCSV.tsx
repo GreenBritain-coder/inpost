@@ -72,7 +72,7 @@ export default function UploadCSV() {
 
   const downloadTemplate = () => {
     // Template with all optional fields - users can remove columns they don't need
-    const template = 'tracking_number,user_id,telegram_chat_id,email_used\nJJD0002233573349153,7744334263,,\nMD000000867865453,8899445511,,';
+    const template = 'tracking_number,user_id,email_used\nJJD0002233573349153,7744334263,\nMD000000867865453,8899445511,';
     const blob = new Blob([template], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -97,7 +97,6 @@ export default function UploadCSV() {
         <p><strong>Optional columns:</strong></p>
         <ul>
           <li><strong>user_id</strong> - <strong>Telegram user ID</strong> (Telegram's numeric ID, e.g., 7744334263). If provided, the system will find or create a user with this Telegram ID and link the tracking to them. If omitted, tracking will be created without a user assignment.</li>
-          <li><strong>telegram_chat_id</strong> - Only needed for manual chat linking (rarely used)</li>
           <li><strong>email_used</strong> - Email address used for this tracking</li>
         </ul>
         <p className="example-note">
