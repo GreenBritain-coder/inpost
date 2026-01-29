@@ -841,7 +841,6 @@ export default function Dashboard() {
                       <option value="not_scanned">🔴 Not Scanned</option>
                       <option value="scanned">🟡 Scanned</option>
                       <option value="delivered">🟢 Delivered</option>
-                      <option value="cancelled">⚫ Cancelled</option>
                     </select>
                     <button
                       onClick={() => handleRefreshSingle(tn.id)}
