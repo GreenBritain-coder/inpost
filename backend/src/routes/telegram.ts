@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import axios from 'axios';
 import { pool } from '../db/connection';
+import { setTelegramChatId, getUserIdByTelegramChatId, findUserByTelegramIdentity } from '../models/user';
 
 const router = express.Router();
 
@@ -30,20 +31,30 @@ router.post('/webhook', express.json(), async (req: Request, res: Response) => {
 /**
  * Helper function to send a message via Telegram API
  */
-async function sendTelegramMessage(chatId: number | bigint, text: string): Promise<boolean> {
+/** Inline menu: My trackings + Help */
+const INLINE_MENU = {
+  reply_markup: {
+    inline_keyboard: [
+      [{ text: '📦 My trackings', callback_data: 'tracking' }, { text: '🆘 Help', callback_data: 'help' }],
+    ],
+  },
+};
+
+async function sendTelegramMessage(chatId: number | bigint, text: string, withMenu = false): Promise<boolean> {
   if (!TELEGRAM_BOT_TOKEN) {
     console.error('[Telegram] Bot token not configured');
     return false;
   }
 
   try {
-    // Convert BigInt to string for serialization (Telegram API accepts string or number)
     const chatIdStr = typeof chatId === 'bigint' ? chatId.toString() : String(chatId);
-    const response = await axios.post(`${TELEGRAM_API_URL}/sendMessage`, {
+    const payload: any = {
       chat_id: chatIdStr,
       text: text,
       parse_mode: 'HTML',
-    });
+    };
+    if (withMenu) payload.reply_markup = INLINE_MENU.reply_markup;
+    const response = await axios.post(`${TELEGRAM_API_URL}/sendMessage`, payload);
 
     if (response.data.ok) {
       console.log(`[Telegram] ✅ Sent message to chat ${chatId}`);
@@ -62,9 +73,19 @@ async function sendTelegramMessage(chatId: number | bigint, text: string): Promi
   }
 }
 
-/**
- * Helper function to get status emoji
- */
+async function answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
+  try {
+    await axios.post(`${TELEGRAM_API_URL}/answerCallbackQuery`, {
+      callback_query_id: callbackQueryId,
+      text: text ?? undefined,
+    });
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      console.error('[Telegram] answerCallbackQuery error:', error.message);
+    }
+  }
+}
+
 function getStatusEmoji(status: string): string {
   switch (status) {
     case 'not_scanned':
@@ -78,13 +99,126 @@ function getStatusEmoji(status: string): string {
   }
 }
 
+/** Telegram "from" object (id and optional username) for identity lookup */
+interface TelegramFrom {
+  id?: number;
+  username?: string;
+}
+
 /**
- * Process a Telegram update (message from user)
+ * Resolve backend user ID for this chat.
+ * 1) By telegram_chat_id (already linked).
+ * 2) By telegram_user_id / telegram_username (admin set in backend) — then link chat and return user.
+ */
+async function getLinkedUserId(
+  chatId: number | bigint,
+  from?: TelegramFrom | null
+): Promise<number | null> {
+  let userId = await getUserIdByTelegramChatId(chatId);
+  if (userId != null) return userId;
+
+  if (from?.id != null || from?.username) {
+    const telegramUserId = from.id != null ? Number(from.id) : null;
+    const telegramUsername = from.username ? `@${from.username}` : null;
+    const matched = await findUserByTelegramIdentity(telegramUserId ?? null, telegramUsername ?? null);
+    if (matched) {
+      await setTelegramChatId(matched.id, chatId, telegramUserId ?? undefined);
+      console.log(`[Telegram] Linked chat ${chatId} to user_id ${matched.id} (telegram_user_id=${telegramUserId})`);
+      return matched.id;
+    }
+  }
+  return null;
+}
+
+/** Build and send tracking list for a chat (used by /tracking and inline "My trackings" button) */
+async function sendTrackingResponse(
+  chatId: number | bigint,
+  withMenu: boolean,
+  from?: TelegramFrom | null
+): Promise<void> {
+  try {
+    const linkedUserId = await getLinkedUserId(chatId, from);
+    const result = await pool.query(
+      `SELECT tracking_number, pickup_code, locker_id, current_status, 
+              email_received_at, pickup_code_sent_at, created_at
+       FROM tracking_numbers 
+       WHERE telegram_chat_id = $1 
+          OR (user_id = $2 AND $2 IS NOT NULL)
+       ORDER BY created_at DESC
+       LIMIT 20`,
+      [chatId.toString(), linkedUserId ?? null]
+    );
+
+    if (result.rows.length === 0) {
+      const text = linkedUserId == null
+        ? `📦 No tracking numbers found for you.\n\n` +
+          `Your admin must link your account: add your Telegram user ID (<code>${from?.id ?? '…'}</code>) to your user in the backend, then tap /tracking again.`
+        : `📦 No tracking numbers assigned to you yet.\n\nYou're linked — you'll see trackings here once your admin adds them.`;
+      await sendTelegramMessage(chatId, text, withMenu);
+      return;
+    }
+
+    let text = `📦 Your Tracking Numbers (${result.rows.length})\n\n`;
+    for (const row of result.rows) {
+      text += `🔹 <b>${row.tracking_number}</b>\n`;
+      text += `   Status: ${getStatusEmoji(row.current_status)} ${row.current_status}\n`;
+      if (row.pickup_code) {
+        text += `   ✅ Pickup Code: <code>${row.pickup_code}</code>\n`;
+        if (row.locker_id) text += `   📍 Location: ${row.locker_id}\n`;
+        if (row.pickup_code_sent_at) {
+          text += `   📅 Sent: ${new Date(row.pickup_code_sent_at).toLocaleDateString()}\n`;
+        }
+      } else {
+        text += `   ⏳ Pickup code not yet available\n`;
+      }
+      text += `\n`;
+    }
+    text += `💡 Tip: Pickup codes are sent automatically when your parcel is ready.`;
+    await sendTelegramMessage(chatId, text, withMenu);
+  } catch (error) {
+    console.error('[Telegram] Error fetching tracking numbers:', error);
+    await sendTelegramMessage(chatId, '❌ Error fetching your tracking numbers. Please try again later.', withMenu);
+  }
+}
+
+/**
+ * Process a Telegram update (message or inline button press)
  * This function is used by both webhook and polling
  */
 async function processTelegramUpdate(update: any): Promise<void> {
+  // Handle inline button press (e.g. "📦 My trackings" or "🆘 Help")
+  if (update.callback_query) {
+    const cq = update.callback_query;
+    const chatId = cq.message?.chat?.id;
+    const data = cq.data;
+    const callbackQueryId = cq.id;
+
+    if (!chatId) return;
+
+    console.log(`[Telegram] Callback from chat ${chatId}: ${data}`);
+    await answerCallbackQuery(callbackQueryId);
+
+    if (data === 'tracking') {
+      const from = cq.from ? { id: cq.from.id, username: cq.from.username } : undefined;
+      await sendTrackingResponse(chatId, true, from);
+      return;
+    }
+    if (data === 'help') {
+      const helpText = `📦 InPost Tracking Bot Help\n\n` +
+        `This bot sends pickup codes when your InPost parcels are ready.\n\n` +
+        `To see your trackings:\n` +
+        `• Your admin adds your Telegram user ID to your account in the backend.\n` +
+        `• Then tap <b>📦 My trackings</b> or send /tracking — the bot looks you up by your Telegram ID and shows your trackers.\n\n` +
+        `You can also use a link from your admin: /start YOUR_USER_ID\n\n` +
+        `Use the menu below to see your trackings or help.`;
+      await sendTelegramMessage(chatId, helpText, true);
+      return;
+    }
+    return;
+  }
+
   if (!update.message) {
-    return; // Ignore non-message updates
+    return;
   }
 
   const message = update.message;
@@ -94,123 +228,102 @@ async function processTelegramUpdate(update: any): Promise<void> {
 
   console.log(`[Telegram] Received message from chat ${chatId}: ${text}`);
 
-  // Handle /start command
+  // Handle /start — match by Telegram identity (from.id or @username) or by /start USER_ID
   if (command === '/start' || command.startsWith('/start')) {
-    const responseText = `👋 Welcome to InPost Tracking Bot!\n\n` +
-      `Your Chat ID: <code>${chatId}</code>\n\n` +
-      `Use this Chat ID when creating tracking numbers to receive pickup codes automatically.\n\n` +
-      `Commands:\n` +
-      `/start - Show this message\n` +
-      `/chatid - Show your chat ID\n` +
-      `/tracking - Show all your tracking numbers\n` +
-      `/help - Show help message`;
+    const parts = text.trim().split(/\s+/);
+    const startArg = parts[1];
+    const userIdFromPayload = startArg ? parseInt(startArg, 10) : NaN;
 
-    await sendTelegramMessage(chatId, responseText);
-    return;
-  }
+    // 1) Explicit /start USER_ID (link from admin)
+    if (!isNaN(userIdFromPayload) && userIdFromPayload > 0) {
+      const linked = await setTelegramChatId(userIdFromPayload, chatId);
+      if (linked) {
+        await sendTelegramMessage(chatId,
+          `✅ You're linked!\n\nYour account is now connected. You'll receive pickup codes here when your parcels are ready.\n\nUse the menu below to see your trackings.`,
+          true
+        );
+        console.log(`[Telegram] Linked user_id ${userIdFromPayload} to chat ${chatId}`);
+      } else {
+        await sendTelegramMessage(chatId, `❌ User ID <code>${userIdFromPayload}</code> not found. Ask your admin for the correct link.`, true);
+      }
+      return;
+    }
 
-  // Handle /chatid command
-  if (command === '/chatid' || command.startsWith('/chatid')) {
-    const responseText = `Your Chat ID: <code>${chatId}</code>\n\n` +
-      `Use this ID when creating tracking numbers to receive pickup codes.`;
+    // 2) Automatic match by Telegram identity (user has telegram_user_id or telegram_username set in backend)
+    const from = message.from;
+    const telegramUserId = from?.id != null ? Number(from.id) : null;
+    const telegramUsername = from?.username ? `@${from.username}` : null;
 
-    await sendTelegramMessage(chatId, responseText);
+    const matchedUser = await findUserByTelegramIdentity(telegramUserId ?? null, telegramUsername ?? null);
+    if (matchedUser) {
+      const linked = await setTelegramChatId(matchedUser.id, chatId, telegramUserId ?? undefined);
+      if (linked) {
+        await sendTelegramMessage(chatId,
+          `✅ You're linked!\n\nYour account is now connected. You'll receive pickup codes here when your parcels are ready.\n\nUse the menu below to see your trackings.`,
+          true
+        );
+        console.log(`[Telegram] Auto-linked user_id ${matchedUser.id} to chat ${chatId} (Telegram: id=${telegramUserId} username=${telegramUsername})`);
+      }
+      return;
+    }
+
+    // 3) No match — show welcome and tell them to give their Telegram identity to admin
+    const hint = from?.username ? `@${from.username}` : (telegramUserId ? `Telegram ID: ${telegramUserId}` : 'your Telegram username');
+    const responseText = `👋 Welcome to InPost Tracking Bot (@GB_Track_Bot)\n\n` +
+      `To receive pickup codes here, your admin must add your Telegram identity to your user:\n\n` +
+      `Tell your admin: <code>${hint}</code>\n\n` +
+      `Once they add that to your user in the backend, open this bot again and tap Start — you'll be linked automatically.\n\n` +
+      `Use the menu below:`;
+
+    await sendTelegramMessage(chatId, responseText, true);
     return;
   }
 
   // Handle /help command
   if (command === '/help' || command.startsWith('/help')) {
     const responseText = `📦 InPost Tracking Bot Help\n\n` +
-      `This bot automatically sends pickup codes when your InPost parcels are ready.\n\n` +
-      `To receive pickup codes:\n` +
-      `1. Share your Chat ID with the system administrator\n` +
-      `2. Your Chat ID: <code>${chatId}</code>\n` +
-      `3. Tracking numbers will be linked to this Chat ID\n` +
-      `4. When pickup codes arrive via email, you'll receive them here automatically\n\n` +
-      `Commands:\n` +
-      `/start - Welcome message\n` +
-      `/chatid - Show your chat ID\n` +
-      `/tracking - Show all your tracking numbers and pickup codes\n` +
-      `/help - Show this help`;
+      `This bot sends pickup codes when your InPost parcels are ready.\n\n` +
+      `To see your trackings:\n` +
+      `• Your admin adds your Telegram user ID to your account in the backend.\n` +
+      `• Then tap <b>📦 My trackings</b> or send /tracking — the bot looks you up by your Telegram ID and shows your trackers.\n\n` +
+      `You can also use a link from your admin: /start YOUR_USER_ID\n\n` +
+      `Use the menu below:`;
 
-    await sendTelegramMessage(chatId, responseText);
+    await sendTelegramMessage(chatId, responseText, true);
     return;
   }
 
-  // Handle /tracking command - show user's tracking numbers and pickup codes
+  // Handle /tracking command — resolve user by chat_id or by telegram_user_id (admin set in backend)
   if (command === '/tracking' || command.startsWith('/tracking')) {
-    try {
-      const result = await pool.query(
-        `SELECT tracking_number, pickup_code, locker_id, current_status, 
-                email_received_at, pickup_code_sent_at, created_at
-         FROM tracking_numbers 
-         WHERE telegram_chat_id = $1 
-         ORDER BY created_at DESC
-         LIMIT 20`,
-        [chatId.toString()]
-      );
-
-      if (result.rows.length === 0) {
-        const responseText = `📦 No tracking numbers found for your Chat ID.\n\n` +
-          `Your Chat ID: <code>${chatId}</code>\n\n` +
-          `Share this Chat ID with the administrator to link tracking numbers to your account.`;
-
-        await sendTelegramMessage(chatId, responseText);
-        return;
-      }
-
-      let responseText = `📦 Your Tracking Numbers (${result.rows.length})\n\n`;
-
-      for (const row of result.rows) {
-        responseText += `🔹 <b>${row.tracking_number}</b>\n`;
-        responseText += `   Status: ${getStatusEmoji(row.current_status)} ${row.current_status}\n`;
-        
-        if (row.pickup_code) {
-          responseText += `   ✅ Pickup Code: <code>${row.pickup_code}</code>\n`;
-          if (row.locker_id) {
-            responseText += `   📍 Location: ${row.locker_id}\n`;
-          }
-          if (row.pickup_code_sent_at) {
-            const sentDate = new Date(row.pickup_code_sent_at);
-            responseText += `   📅 Sent: ${sentDate.toLocaleDateString()}\n`;
-          }
-        } else {
-          responseText += `   ⏳ Pickup code not yet available\n`;
-        }
-        responseText += `\n`;
-      }
-
-      responseText += `\n💡 Tip: Pickup codes are sent automatically when your parcel is ready.`;
-
-      await sendTelegramMessage(chatId, responseText);
-      return;
-    } catch (error) {
-      console.error('[Telegram] Error fetching tracking numbers:', error);
-      await sendTelegramMessage(chatId, '❌ Error fetching your tracking numbers. Please try again later.');
-      return;
-    }
+    const from = message.from ? { id: message.from.id, username: message.from.username } : undefined;
+    await sendTrackingResponse(chatId, true, from);
+    return;
   }
 
   // Check if message is a tracking number (24 characters alphanumeric)
-  // Remove spaces and make case-insensitive for better matching
   const cleanedText = text.replace(/\s+/g, '').toUpperCase();
   const trackingNumberMatch = cleanedText.match(/([A-Z0-9]{24})/);
   if (trackingNumberMatch) {
     const trackingNumber = trackingNumberMatch[1];
     console.log(`[Telegram] Detected tracking number: ${trackingNumber}`);
     try {
+      const from = message.from ? { id: message.from.id, username: message.from.username } : undefined;
+      const linkedUserId = await getLinkedUserId(chatId, from);
       const result = await pool.query(
         `SELECT tracking_number, pickup_code, locker_id, current_status, 
                 email_received_at, pickup_code_sent_at
          FROM tracking_numbers 
-         WHERE tracking_number = $1 AND telegram_chat_id = $2`,
-        [trackingNumber, chatId.toString()]
+         WHERE tracking_number = $1 
+           AND (telegram_chat_id = $2 OR (user_id = $3 AND $3 IS NOT NULL))`,
+        [trackingNumber, chatId.toString(), linkedUserId ?? null]
       );
 
       if (result.rows.length === 0) {
-        await sendTelegramMessage(chatId, 
-          `❌ Tracking number <code>${trackingNumber}</code> not found for your account.\n\n` +
-          `Make sure this tracking number is linked to your Chat ID: <code>${chatId}</code>`
+        await sendTelegramMessage(chatId,
+          linkedUserId == null
+            ? `❌ Tracking number <code>${trackingNumber}</code> not found.\n\nYour admin must add your Telegram user ID to your user in the backend, then try again.`
+            : `❌ Tracking number <code>${trackingNumber}</code> is not assigned to your account.`,
+          true
         );
         return;
       }
@@ -233,23 +346,20 @@ async function processTelegramUpdate(update: any): Promise<void> {
         responseText += `You'll receive it automatically when your parcel is ready.`;
       }
 
-      await sendTelegramMessage(chatId, responseText);
+      await sendTelegramMessage(chatId, responseText, true);
       return;
     } catch (error) {
       console.error('[Telegram] Error fetching tracking number:', error);
-      await sendTelegramMessage(chatId, '❌ Error fetching tracking information. Please try again later.');
+      await sendTelegramMessage(chatId, '❌ Error fetching tracking information. Please try again later.', true);
       return;
     }
   }
 
   // Default response for any other message
-  const responseText = `👋 Hello! I'm the InPost Tracking Bot.\n\n` +
-    `Send /start to get your Chat ID and setup instructions.\n` +
-    `Send /tracking to see all your tracking numbers.\n` +
-    `Or send a tracking number to get its pickup code.\n\n` +
-    `Your Chat ID: <code>${chatId}</code>`;
+  const responseText = `👋 Hello! I'm the InPost Tracking Bot (@GB_Track_Bot).\n\n` +
+    `Send /start to link your account, or use the menu below:`;
 
-  await sendTelegramMessage(chatId, responseText);
+  await sendTelegramMessage(chatId, responseText, true);
 }
 
 /**

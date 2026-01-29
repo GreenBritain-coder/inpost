@@ -2,6 +2,7 @@ import Imap from 'imap';
 import { simpleParser } from 'mailparser';
 import { pool } from '../db/connection';
 import { createTrackingNumber } from '../models/tracking';
+import { getTelegramChatIdByUserId } from '../models/user';
 
 /**
  * Parse IMAP account configuration from environment variables
@@ -437,10 +438,16 @@ async function processEmail(emailText: string, emailHtml: string, emailSubject: 
     } else {
       await updateTrackingWithPickupCode(match.tracking_id, pickupCode, lockerId);
 
-      if (match.telegram_chat_id != null) {
+      // Use telegram_chat_id on tracking, or look up from user_id (user linked via /start USER_ID)
+      let effectiveChatId = match.telegram_chat_id;
+      if (effectiveChatId == null && match.user_id != null) {
+        effectiveChatId = await getTelegramChatIdByUserId(match.user_id);
+      }
+
+      if (effectiveChatId != null) {
         const { sendPickupCodeToTelegram } = await import('./telegramService');
         const sent = await sendPickupCodeToTelegram(
-          match.telegram_chat_id,
+          effectiveChatId,
           trackingNumber,
           pickupCode,
           lockerId
@@ -454,7 +461,7 @@ async function processEmail(emailText: string, emailHtml: string, emailSubject: 
         }
       } else {
         await markPickupCodeSent(match.tracking_id);
-        console.log(`[Email Scraper] ✅ Stored PICKUP code for ${trackingNumber} (no Telegram chat linked)`);
+        console.log(`[Email Scraper] ✅ Stored PICKUP code for ${trackingNumber} (no Telegram linked for this user)`);
         processedSomething = true;
       }
     }

@@ -18,6 +18,7 @@ import {
   saveTrackingEvents,
 } from '../models/tracking';
 import { createBox, getAllBoxes, getBoxById, updateBox, deleteBox, getKingBoxes } from '../models/box';
+import { updateUserTelegramIdentity, getUserById } from '../models/user';
 import { getStatusHistory, getRecentStatusChanges, getRecentScannedChanges } from '../models/statusHistory';
 import { updateAllTrackingStatuses, cleanupOldTrackingData } from '../services/scheduler';
 import { checkInPostEmails } from '../services/emailScraper';
@@ -711,11 +712,13 @@ router.post(
 );
 
 // CSV Upload endpoint: POST /api/tracking/numbers/upload-csv
-// Expected CSV format: user_id,tracking_number (header row optional)
+// Expected CSV format: user_id,tracking_number[,telegram_user_id][,telegram_chat_id][,email_used]
+// If telegram_user_id is present for a user, that user's Telegram ID is set on their account
+// so they can tap /tracking in the bot and get their trackers without using a start link.
 // Example:
-// user_id,tracking_number
-// 123,JJD0002233573349153
-// 456,MD000000867865453
+// user_id,tracking_number,telegram_user_id
+// 123,JJD0002233573349153,7744334263
+// 456,MD000000867865453,8899445511
 router.post(
   '/numbers/upload-csv',
   upload.single('file'),
@@ -762,10 +765,12 @@ router.post(
         status: 'created' | 'duplicate' | 'error'; 
         message?: string;
       }> = [];
+      const createdUserIds = new Set<number>();
 
       for (const record of records) {
         const trackingNumber = record.tracking_number?.trim();
-        const userId = record.user_id ? parseInt(record.user_id) : null;
+        const userId = record.user_id ? parseInt(record.user_id, 10) : null;
+        const telegramUserIdRaw = record.telegram_user_id != null && record.telegram_user_id !== '' ? String(record.telegram_user_id).trim() : null;
         const telegramChatId = record.telegram_chat_id ? BigInt(record.telegram_chat_id) : null;
         const emailUsed = record.email_used?.trim() || null;
 
@@ -779,6 +784,19 @@ router.post(
         }
 
         try {
+          // If user_id provided, ensure user exists so /start user_id will work
+          if (userId != null && !isNaN(userId)) {
+            const userExists = await getUserById(userId);
+            if (!userExists) {
+              results.push({
+                tracking_number: trackingNumber,
+                status: 'error',
+                message: `User ID ${userId} not found`
+              });
+              continue;
+            }
+          }
+
           // Check if tracking number already exists
           const existing = await pool.query(
             'SELECT id FROM tracking_numbers WHERE tracking_number = $1',
@@ -803,10 +821,23 @@ router.post(
             emailUsed
           );
 
+          // If row has user_id + telegram_user_id, set that user's Telegram ID on their account
+          // so they can tap /tracking in the bot and get their trackers
+          if (userId != null && !isNaN(userId) && telegramUserIdRaw) {
+            try {
+              await updateUserTelegramIdentity(userId, null, telegramUserIdRaw);
+            } catch (e) {
+              console.warn(`[CSV] Could not set telegram_user_id for user ${userId}:`, e);
+            }
+          }
+
           results.push({
             tracking_number: trackingNumber,
             status: 'created',
           });
+          if (userId != null && !isNaN(userId)) {
+            createdUserIds.add(userId);
+          }
         } catch (error) {
           console.error(`Error creating tracking ${trackingNumber}:`, error);
           results.push({
@@ -821,6 +852,13 @@ router.post(
       const duplicateCount = results.filter(r => r.status === 'duplicate').length;
       const errorCount = results.filter(r => r.status === 'error').length;
 
+      // Build /start user_id links for each unique user so admin can send them
+      const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'GB_Track_Bot';
+      const user_links = Array.from(createdUserIds).sort((a, b) => a - b).map(uid => ({
+        user_id: uid,
+        link: `https://t.me/${botUsername}?start=${uid}`,
+      }));
+
       res.status(201).json({
         message: `Processed ${records.length} rows: ${successCount} created, ${duplicateCount} duplicates, ${errorCount} errors`,
         summary: {
@@ -829,6 +867,7 @@ router.post(
           duplicates: duplicateCount,
           errors: errorCount,
         },
+        user_links,
         results,
       });
     } catch (error) {
@@ -1131,6 +1170,51 @@ router.patch(
       res.json(updated);
     } catch (error) {
       console.error('Error updating tracking user info:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+// Update a user's Telegram identity (for automatic linking when they /start the bot)
+// Set telegram_username (@username) or telegram_user_id (Telegram's from.id) so the bot can match them on /start
+router.patch(
+  '/users/:id/telegram',
+  [
+    body('telegram_username').optional({ nullable: true }).trim(),
+    body('telegram_user_id').optional({ nullable: true }),
+  ],
+  async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const userId = parseInt(req.params.id, 10);
+      if (isNaN(userId)) {
+        return res.status(400).json({ error: 'Invalid user ID' });
+      }
+
+      const user = await getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      const { telegram_username, telegram_user_id } = req.body;
+      const updated = await updateUserTelegramIdentity(
+        userId,
+        telegram_username ?? null,
+        telegram_user_id ?? null
+      );
+
+      if (!updated) {
+        return res.status(500).json({ error: 'Failed to update user Telegram identity' });
+      }
+
+      const updatedUser = await getUserById(userId);
+      res.json(updatedUser);
+    } catch (error) {
+      console.error('Error updating user Telegram identity:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }

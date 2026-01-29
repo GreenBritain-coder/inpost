@@ -8,6 +8,11 @@ interface UploadResult {
   message?: string;
 }
 
+interface UserLink {
+  user_id: number;
+  link: string;
+}
+
 interface UploadResponse {
   message: string;
   summary: {
@@ -16,6 +21,7 @@ interface UploadResponse {
     duplicates: number;
     errors: number;
   };
+  user_links?: UserLink[];
   results: UploadResult[];
 }
 
@@ -23,7 +29,14 @@ export default function UploadCSV() {
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<UploadResponse | null>(null);
   const [error, setError] = useState('');
+  const [copiedId, setCopiedId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const copyLink = (user_id: number, link: string) => {
+    navigator.clipboard.writeText(link);
+    setCopiedId(user_id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -58,7 +71,7 @@ export default function UploadCSV() {
   };
 
   const downloadTemplate = () => {
-    const template = 'user_id,tracking_number,telegram_chat_id,email_used\n123,JJD0002233573349153,7744334263,user@example.com\n456,MD000000867865453,,';
+    const template = 'user_id,tracking_number,telegram_user_id,telegram_chat_id,email_used\n123,JJD0002233573349153,7744334263,,user@example.com\n456,MD000000867865453,8899445511,,';
     const blob = new Blob([template], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -79,14 +92,15 @@ export default function UploadCSV() {
 
       <div className="upload-instructions">
         <h3>CSV Format</h3>
-        <p>Your CSV file should have the following columns (header row required):</p>
+        <p>Your CSV file should have the following columns (header row required). Rows with <strong>user_id</strong> assign trackings to that user:</p>
         <ul>
           <li><strong>tracking_number</strong> (required) - InPost tracking number</li>
-          <li><strong>user_id</strong> (optional) - User ID from your system</li>
-          <li><strong>telegram_chat_id</strong> (optional) - Telegram chat ID for notifications</li>
+          <li><strong>user_id</strong> (optional) - Backend user ID. Assigns this tracking to that user.</li>
+          <li><strong>telegram_user_id</strong> (optional) - Telegram user ID (from.id). If present, it is set on that user’s account so they can open the bot and tap /tracking to see their trackers (no start link needed).</li>
+          <li><strong>telegram_chat_id</strong> (optional) - Only if you need manual chat linking.</li>
           <li><strong>email_used</strong> (optional) - Email address used for this tracking</li>
         </ul>
-        <p className="example-note">Example: <code>user_id,tracking_number,telegram_chat_id,email_used</code></p>
+        <p className="example-note">Example: <code>user_id,tracking_number,telegram_user_id</code> — include <strong>telegram_user_id</strong> so when they tap /tracking it’s already done.</p>
       </div>
 
       <div className="upload-area">
@@ -129,6 +143,29 @@ export default function UploadCSV() {
               </div>
             </div>
           </div>
+
+          {result.user_links && result.user_links.length > 0 && (
+            <div className="results-details user-links-section">
+              <h4>🔗 /start user_id links (share with each user)</h4>
+              <p className="user-links-note">Send each user their link; when they open the bot and tap Start they are linked and see their trackings.</p>
+              <ul className="user-links-list">
+                {result.user_links.map(({ user_id, link }) => (
+                  <li key={user_id} className="user-link-item">
+                    <span className="user-id">User {user_id}</span>
+                    <a href={link} target="_blank" rel="noopener noreferrer" className="user-link">{link}</a>
+                    <button
+                      type="button"
+                      className="copy-link-btn"
+                      onClick={() => copyLink(user_id, link)}
+                      title="Copy link"
+                    >
+                      {copiedId === user_id ? '✓ Copied!' : '📋 Copy'}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {(result.summary.duplicates > 0 || result.summary.errors > 0) && (
             <div className="results-details">

@@ -12,6 +12,29 @@ async function migrate() {
       )
     `);
 
+    // Add telegram_chat_id to users so we can send them pickup codes
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='telegram_chat_id') THEN
+          ALTER TABLE users ADD COLUMN telegram_chat_id BIGINT;
+        END IF;
+      END $$;
+    `);
+
+    // Telegram identity for automatic linking when user sends /start (no link needed)
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='telegram_user_id') THEN
+          ALTER TABLE users ADD COLUMN telegram_user_id BIGINT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='telegram_username') THEN
+          ALTER TABLE users ADD COLUMN telegram_username VARCHAR(255);
+        END IF;
+      END $$;
+    `);
+
     // Create boxes table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS boxes (
