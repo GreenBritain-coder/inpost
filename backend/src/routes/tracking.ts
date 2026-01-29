@@ -16,6 +16,7 @@ import {
   saveTrackingEvents,
 } from '../models/tracking';
 import { createBox, getAllBoxes, getBoxById, updateBox, deleteBox, getKingBoxes } from '../models/box';
+import { getAllUsers, getUserById, updateUserTelegramIdentity, findOrCreateUserByTelegramUserId } from '../models/user';
 import { getStatusHistory, getRecentStatusChanges, getRecentScannedChanges } from '../models/statusHistory';
 import { updateAllTrackingStatuses, cleanupOldTrackingData } from '../services/scheduler';
 import { checkInPostStatus } from '../services/scraper';
@@ -529,11 +530,17 @@ router.get('/numbers/:id/events', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// POST /numbers — create a tracking number.
+// User linking: provide exactly one of user_id (database user id) or telegram_user_id (Telegram from.id). If both provided, returns 400.
 router.post(
   '/numbers',
   [
     body('tracking_number').notEmpty().trim(),
     body('box_id').optional().isInt(),
+    body('user_id').optional().isInt(),
+    body('telegram_user_id').optional(),
+    body('telegram_chat_id').optional().isInt().toInt(),
+    body('email_used').optional().isEmail().normalizeEmail(),
   ],
   async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
@@ -542,17 +549,45 @@ router.post(
     }
 
     try {
-      const { tracking_number, box_id } = req.body;
-      
-      // Validate box exists if provided
+      const { tracking_number, box_id, user_id, telegram_user_id, telegram_chat_id, email_used } = req.body;
+      const hasUserId = user_id != null;
+      const hasTelegramUserId = telegram_user_id != null && String(telegram_user_id).trim() !== '';
+
+      if (hasUserId && hasTelegramUserId) {
+        return res.status(400).json({
+          error: 'Provide either user_id or telegram_user_id, not both.',
+          details: 'Use user_id for an existing database user id, or telegram_user_id (Telegram from.id) to link by Telegram identity.',
+        });
+      }
+
       if (box_id) {
         const box = await getBoxById(box_id);
         if (!box) {
           return res.status(404).json({ error: 'Box not found' });
         }
       }
-      
-      const tracking = await createTrackingNumber(tracking_number, box_id || null);
+
+      let databaseUserId: number | null = null;
+      if (hasTelegramUserId) {
+        try {
+          databaseUserId = await findOrCreateUserByTelegramUserId(String(telegram_user_id).trim());
+        } catch (e) {
+          return res.status(400).json({
+            error: 'Failed to find/create user for Telegram User ID',
+            details: e instanceof Error ? e.message : 'Unknown error',
+          });
+        }
+      } else if (hasUserId) {
+        databaseUserId = user_id;
+      }
+
+      const tracking = await createTrackingNumber(
+        tracking_number,
+        box_id || null,
+        databaseUserId,
+        telegram_chat_id || null,
+        email_used || null
+      );
       res.status(201).json(tracking);
     } catch (error) {
       console.error('Error creating tracking number:', error);
@@ -844,6 +879,55 @@ router.patch(
       res.json(updated);
     } catch (error) {
       console.error('Error updating tracking status:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+// Users (Link Telegram from dashboard)
+router.get('/users', async (req: AuthRequest, res: Response) => {
+  try {
+    const users = await getAllUsers();
+    res.json(users);
+  } catch (error) {
+    console.error('Error listing users:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch(
+  '/users/:id/telegram',
+  [
+    body('telegram_username').optional({ nullable: true }).trim(),
+    body('telegram_user_id').optional({ nullable: true }),
+  ],
+  async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    try {
+      const userId = parseInt(req.params.id, 10);
+      if (isNaN(userId)) {
+        return res.status(400).json({ error: 'Invalid user ID' });
+      }
+      const user = await getUserById(userId);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      const { telegram_username, telegram_user_id } = req.body;
+      const updated = await updateUserTelegramIdentity(
+        userId,
+        telegram_username ?? null,
+        telegram_user_id ?? null
+      );
+      if (!updated) {
+        return res.status(500).json({ error: 'Failed to update user Telegram identity' });
+      }
+      const updatedUser = await getUserById(userId);
+      res.json(updatedUser);
+    } catch (error) {
+      console.error('Error updating user Telegram identity:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
