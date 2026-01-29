@@ -673,8 +673,22 @@ export default function Dashboard() {
                       ))}
                     </select>
                   </td>
-                  <td>{tn.pickup_code || '-'}</td>
-                  <td>{tn.locker_id || '-'}</td>
+                  <td className="pickup-code" style={{ 
+                    fontWeight: tn.pickup_code ? 'bold' : 'normal',
+                    color: tn.pickup_code ? '#27ae60' : '#999',
+                    fontSize: tn.pickup_code ? '1.1rem' : '0.9rem'
+                  }}>
+                    {tn.pickup_code || '-'}
+                  </td>
+                  <td className="locker-location" style={{
+                    fontSize: '0.85rem',
+                    maxWidth: '200px',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }} title={tn.locker_id || undefined}>
+                    {tn.locker_id || '-'}
+                  </td>
                   <td>{tn.trackingmore_status || '-'}</td>
                   <td>
                     {renderTimestampEdit()}
@@ -836,11 +850,17 @@ export default function Dashboard() {
                   </div>
                   <div className="tracking-card-detail-row">
                     <span className="tracking-card-detail-label">Pickup Code:</span>
-                    <span className="tracking-card-detail-value">{tn.pickup_code || '-'}</span>
+                    <span className="tracking-card-detail-value" style={{
+                      fontWeight: tn.pickup_code ? 'bold' : 'normal',
+                      color: tn.pickup_code ? '#27ae60' : '#999',
+                      fontSize: tn.pickup_code ? '1.1rem' : '0.9rem'
+                    }}>{tn.pickup_code || '-'}</span>
                   </div>
                   <div className="tracking-card-detail-row">
                     <span className="tracking-card-detail-label">Location:</span>
-                    <span className="tracking-card-detail-value">{tn.locker_id || '-'}</span>
+                    <span className="tracking-card-detail-value" style={{
+                      fontSize: '0.85rem'
+                    }}>{tn.locker_id || '-'}</span>
                   </div>
                   <div className="tracking-card-detail-row">
                     <span className="tracking-card-detail-label">TrackingMore Status:</span>
