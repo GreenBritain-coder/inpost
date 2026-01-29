@@ -1008,5 +1008,89 @@ router.get('/cleanup-logs', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// User management endpoints
+router.get('/users', async (req: AuthRequest, res: Response) => {
+  try {
+    const { getAllUsers } = await import('../models/user');
+    const users = await getAllUsers();
+    res.json(users);
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/users/:id/telegram', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const { telegram_user_id, telegram_username } = req.body;
+    
+    const { updateUserTelegramIdentity, getUserById } = await import('../models/user');
+    const updated = await updateUserTelegramIdentity(
+      userId,
+      telegram_username || null,
+      telegram_user_id || null
+    );
+    
+    if (!updated) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const user = await getUserById(userId);
+    res.json(user);
+  } catch (error) {
+    console.error('Error updating user telegram info:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/users/:id/fetch-telegram-username', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const { getUserById, updateUserTelegramIdentity } = await import('../models/user');
+    const user = await getUserById(userId);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    if (!user.telegram_user_id) {
+      return res.status(400).json({ error: 'User does not have a Telegram user ID set' });
+    }
+    
+    const { getTelegramUsernameByUserId } = await import('../services/telegramService');
+    const username = await getTelegramUsernameByUserId(user.telegram_user_id);
+    
+    if (username) {
+      await updateUserTelegramIdentity(userId, username, user.telegram_user_id);
+      const updatedUser = await getUserById(userId);
+      res.json({ username, user: updatedUser });
+    } else {
+      res.json({ username: null, user });
+    }
+  } catch (error) {
+    console.error('Error fetching Telegram username:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const { deleteUser } = await import('../models/user');
+    const deleted = await deleteUser(userId);
+    
+    if (!deleted) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;
+
 
