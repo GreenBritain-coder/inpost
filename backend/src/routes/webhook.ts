@@ -99,6 +99,72 @@ function verifyWebhookSignature(body: string, signature: string, timestamp?: str
  * This should match the logic in scraper.ts parseTrackingMoreResponse for consistency
  */
 function mapDeliveryStatus(deliveryStatus: string | null | undefined, trackingData?: any): TrackingStatus {
+  // Helper function to check for cancelled status across all possible fields
+  const checkCancelledStatus = (): boolean => {
+    // Check delivery_status
+    if (deliveryStatus) {
+      const statusLower = deliveryStatus.toLowerCase();
+      if (statusLower.includes('cancelled') ||
+          statusLower.includes('canceled') ||
+          statusLower.includes('cancelled by sender') ||
+          statusLower.includes('canceled by sender') ||
+          statusLower.includes('cancelled by recipient') ||
+          statusLower.includes('canceled by recipient')) {
+        return true;
+      }
+    }
+    
+    // Check latest_event.description
+    if (trackingData?.latest_event) {
+      const latestEvent = trackingData.latest_event;
+      let latestEventText = '';
+      if (typeof latestEvent === 'string') {
+        latestEventText = latestEvent;
+      } else if (latestEvent.description) {
+        latestEventText = latestEvent.description;
+      } else if (latestEvent.status) {
+        latestEventText = latestEvent.status;
+      }
+      const latestEventLower = latestEventText.toLowerCase();
+      if (latestEventLower.includes('cancelled') ||
+          latestEventLower.includes('canceled') ||
+          latestEventLower.includes('cancelled by sender') ||
+          latestEventLower.includes('canceled by sender') ||
+          latestEventLower.includes('cancelled by recipient') ||
+          latestEventLower.includes('canceled by recipient')) {
+        return true;
+      }
+    }
+    
+    // Check events for cancelled status
+    const events = trackingData?.origin_info?.trackinfo || 
+                   trackingData?.destination_info?.trackinfo || 
+                   trackingData?.tracking_info || 
+                   trackingData?.trackinfo || 
+                   trackingData?.events || 
+                   [];
+    if (Array.isArray(events) && events.length > 0) {
+      for (const event of events) {
+        const eventStatus = (event.status || event.description || event.checkpoint_status || event.tracking_detail || '').toLowerCase();
+        if (eventStatus.includes('cancelled') ||
+            eventStatus.includes('canceled') ||
+            eventStatus.includes('cancelled by sender') ||
+            eventStatus.includes('canceled by sender') ||
+            eventStatus.includes('cancelled by recipient') ||
+            eventStatus.includes('canceled by recipient')) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  };
+  
+  // Check cancelled FIRST (before delivered/transit) to ensure it's detected
+  if (checkCancelledStatus()) {
+    return 'cancelled';
+  }
+  
   if (!deliveryStatus) {
     // Check if we have tracking events - if so, consider it scanned
     const hasEvents = trackingData?.origin_info?.trackinfo?.length > 0 || 
@@ -114,17 +180,6 @@ function mapDeliveryStatus(deliveryStatus: string | null | undefined, trackingDa
       statusLower.includes('delivery completed') ||
       statusLower.includes('delivered to recipient')) {
     return 'delivered';
-  } 
-  // Map to cancelled status
-  else if (
-    statusLower.includes('cancelled') ||
-    statusLower.includes('canceled') ||
-    statusLower.includes('cancelled by sender') ||
-    statusLower.includes('canceled by sender') ||
-    statusLower.includes('cancelled by recipient') ||
-    statusLower.includes('canceled by recipient')
-  ) {
-    return 'cancelled';
   }
   // Map to scanned status - comprehensive list matching scraper.ts
   else if (

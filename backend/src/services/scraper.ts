@@ -169,8 +169,72 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
       }
     }
     
+    // Helper function to check for cancelled status across all possible fields
+    const checkCancelledStatus = (): boolean => {
+      // Check delivery_status and other status fields
+      if (statusLower.includes('cancelled') ||
+          statusLower.includes('canceled') ||
+          statusLower.includes('cancelled by sender') ||
+          statusLower.includes('canceled by sender') ||
+          statusLower.includes('cancelled by recipient') ||
+          statusLower.includes('canceled by recipient')) {
+        return true;
+      }
+      
+      // Check latest_event.description (trackingmoreStatus)
+      if (trackingmoreStatus) {
+        const trackingmoreStatusLower = trackingmoreStatus.toLowerCase();
+        if (trackingmoreStatusLower.includes('cancelled') ||
+            trackingmoreStatusLower.includes('canceled') ||
+            trackingmoreStatusLower.includes('cancelled by sender') ||
+            trackingmoreStatusLower.includes('canceled by sender') ||
+            trackingmoreStatusLower.includes('cancelled by recipient') ||
+            trackingmoreStatusLower.includes('canceled by recipient')) {
+          return true;
+        }
+      }
+      
+      // Check events for cancelled status
+      if (events && events.length > 0) {
+        for (const event of events) {
+          const eventStatus = (event.status || event.description || event.checkpoint_status || '').toLowerCase();
+          const eventDescription = (event.description || '').toLowerCase();
+          if (eventStatus.includes('cancelled') ||
+              eventStatus.includes('canceled') ||
+              eventDescription.includes('cancelled') ||
+              eventDescription.includes('canceled')) {
+            return true;
+          }
+        }
+      }
+      
+      // Check latest_event object directly if it exists
+      if (trackingData?.latest_event) {
+        const latestEvent = trackingData.latest_event;
+        if (typeof latestEvent === 'object') {
+          const latestEventDesc = (latestEvent.description || latestEvent.status || '').toLowerCase();
+          if (latestEventDesc.includes('cancelled') || latestEventDesc.includes('canceled')) {
+            return true;
+          }
+        }
+      }
+      
+      return false;
+    };
+    
     // Map TrackingMore status to our TrackingStatus enum
-    if (statusLower.includes('delivered') || 
+    // Check cancelled FIRST (before delivered/transit) to ensure it's detected even if delivery_status is "transit"
+    if (checkCancelledStatus()) {
+      console.log(`[${trackingNumber}] TrackingMore: Detected CANCELLED status`);
+      return {
+        status: 'cancelled',
+        details,
+        statusHeader: statusHeader || 'Cancelled',
+        trackingmoreStatus,
+        itemReceived: itemReceived || null,
+        events: parsedEvents,
+      };
+    } else if (statusLower.includes('delivered') || 
         statusLower.includes('delivery completed') ||
         statusLower.includes('delivered to recipient')) {
       console.log(`[${trackingNumber}] TrackingMore: Detected DELIVERED status`);
@@ -178,21 +242,6 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
         status: 'delivered',
         details,
         statusHeader: statusHeader || 'Delivered',
-        trackingmoreStatus,
-        itemReceived: itemReceived || null,
-        events: parsedEvents,
-      };
-    } else if (statusLower.includes('cancelled') ||
-               statusLower.includes('canceled') ||
-               statusLower.includes('cancelled by sender') ||
-               statusLower.includes('canceled by sender') ||
-               statusLower.includes('cancelled by recipient') ||
-               statusLower.includes('canceled by recipient')) {
-      console.log(`[${trackingNumber}] TrackingMore: Detected CANCELLED status`);
-      return {
-        status: 'cancelled',
-        details,
-        statusHeader: statusHeader || 'Cancelled',
         trackingmoreStatus,
         itemReceived: itemReceived || null,
         events: parsedEvents,
