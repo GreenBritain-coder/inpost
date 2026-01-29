@@ -1,5 +1,7 @@
 import express, { Response, Request } from 'express';
 import { body, validationResult } from 'express-validator';
+import multer from 'multer';
+import { parse } from 'csv-parse/sync';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import {
   createTrackingNumber,
@@ -21,6 +23,19 @@ import { updateAllTrackingStatuses, cleanupOldTrackingData } from '../services/s
 import { checkInPostStatus } from '../services/scraper';
 import { pool } from '../db/connection';
 import { verifyToken } from '../services/auth';
+
+// Configure multer for CSV file uploads (memory storage)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV files are allowed'));
+    }
+  },
+});
 
 const router = express.Router();
 
@@ -690,6 +705,137 @@ router.post(
     } catch (error) {
       console.error('Error bulk creating tracking numbers:', error);
       res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+// CSV Upload endpoint: POST /api/tracking/numbers/upload-csv
+// Expected CSV format: user_id,tracking_number (header row optional)
+// Example:
+// user_id,tracking_number
+// 123,JJD0002233573349153
+// 456,MD000000867865453
+router.post(
+  '/numbers/upload-csv',
+  upload.single('file'),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      // Parse CSV from buffer
+      const csvContent = req.file.buffer.toString('utf-8');
+      
+      let records: any[];
+      try {
+        records = parse(csvContent, {
+          columns: true, // First row as headers
+          skip_empty_lines: true,
+          trim: true,
+        });
+      } catch (parseError) {
+        console.error('CSV parse error:', parseError);
+        return res.status(400).json({ 
+          error: 'Invalid CSV format',
+          details: parseError instanceof Error ? parseError.message : 'Unknown error'
+        });
+      }
+
+      if (records.length === 0) {
+        return res.status(400).json({ error: 'CSV file is empty' });
+      }
+
+      // Validate CSV has required columns
+      const firstRecord = records[0];
+      if (!firstRecord.hasOwnProperty('tracking_number')) {
+        return res.status(400).json({ 
+          error: 'CSV must have a "tracking_number" column',
+          found_columns: Object.keys(firstRecord)
+        });
+      }
+
+      // Process each row
+      const results: Array<{ 
+        tracking_number: string; 
+        status: 'created' | 'duplicate' | 'error'; 
+        message?: string;
+      }> = [];
+
+      for (const record of records) {
+        const trackingNumber = record.tracking_number?.trim();
+        const userId = record.user_id ? parseInt(record.user_id) : null;
+        const telegramChatId = record.telegram_chat_id ? BigInt(record.telegram_chat_id) : null;
+        const emailUsed = record.email_used?.trim() || null;
+
+        if (!trackingNumber) {
+          results.push({
+            tracking_number: 'N/A',
+            status: 'error',
+            message: 'Missing tracking number'
+          });
+          continue;
+        }
+
+        try {
+          // Check if tracking number already exists
+          const existing = await pool.query(
+            'SELECT id FROM tracking_numbers WHERE tracking_number = $1',
+            [trackingNumber]
+          );
+
+          if (existing.rows.length > 0) {
+            results.push({
+              tracking_number: trackingNumber,
+              status: 'duplicate',
+              message: 'Tracking number already exists'
+            });
+            continue;
+          }
+
+          // Create tracking number
+          await createTrackingNumber(
+            trackingNumber,
+            null, // box_id (can be set later via UI)
+            userId,
+            telegramChatId,
+            emailUsed
+          );
+
+          results.push({
+            tracking_number: trackingNumber,
+            status: 'created',
+          });
+        } catch (error) {
+          console.error(`Error creating tracking ${trackingNumber}:`, error);
+          results.push({
+            tracking_number: trackingNumber,
+            status: 'error',
+            message: error instanceof Error ? error.message : 'Unknown error'
+          });
+        }
+      }
+
+      const successCount = results.filter(r => r.status === 'created').length;
+      const duplicateCount = results.filter(r => r.status === 'duplicate').length;
+      const errorCount = results.filter(r => r.status === 'error').length;
+
+      res.status(201).json({
+        message: `Processed ${records.length} rows: ${successCount} created, ${duplicateCount} duplicates, ${errorCount} errors`,
+        summary: {
+          total: records.length,
+          created: successCount,
+          duplicates: duplicateCount,
+          errors: errorCount,
+        },
+        results,
+      });
+    } catch (error) {
+      console.error('Error processing CSV upload:', error);
+      res.status(500).json({ 
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   }
 );

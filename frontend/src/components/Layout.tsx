@@ -44,6 +44,13 @@ export default function Layout({ children }: LayoutProps) {
               Add Tracking
             </Link>
             <Link
+              to="/upload"
+              className={location.pathname === '/upload' ? 'active' : ''}
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Upload CSV
+            </Link>
+            <Link
               to="/analytics"
               className={location.pathname === '/analytics' ? 'active' : ''}
               onClick={() => setMobileMenuOpen(false)}

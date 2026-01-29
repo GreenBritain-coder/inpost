@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import AddTracking from './components/AddTracking';
+import UploadCSV from './components/UploadCSV';
 import Analytics from './components/Analytics';
 import Logs from './components/Logs';
 import LastScanned from './components/LastScanned';
@@ -39,6 +40,16 @@ function AppRoutes() {
           <PrivateRoute>
             <Layout>
               <AddTracking />
+            </Layout>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/upload"
+        element={
+          <PrivateRoute>
+            <Layout>
+              <UploadCSV />
             </Layout>
           </PrivateRoute>
         }

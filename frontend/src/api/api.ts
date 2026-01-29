@@ -211,6 +211,12 @@ export const api = {
     if (limit) params.limit = limit;
     return axios.get<CleanupLog[]>(`${API_URL}/tracking/cleanup-logs`, { params });
   },
+  uploadCSV: (formData: FormData) =>
+    axios.post(`${API_URL}/tracking/numbers/upload-csv`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    }),
 };
 
 export interface CleanupLog {
