@@ -21,8 +21,6 @@ import { updateAllTrackingStatuses, cleanupOldTrackingData } from '../services/s
 import { checkInPostStatus } from '../services/scraper';
 import { pool } from '../db/connection';
 import { verifyToken } from '../services/auth';
-import { getUserById } from '../models/user';
-import { updateTrackingNumberUser } from '../models/tracking';
 
 const router = express.Router();
 
