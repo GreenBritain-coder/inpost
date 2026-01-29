@@ -534,9 +534,6 @@ router.post(
   [
     body('tracking_number').notEmpty().trim(),
     body('box_id').optional().isInt(),
-    body('telegram_user_id').optional({ nullable: true }),
-    body('email_used').optional({ nullable: true }).trim(),
-    body('assign_to_user_id').optional().isInt(),
   ],
   async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
@@ -545,7 +542,7 @@ router.post(
     }
 
     try {
-      const { tracking_number, box_id, telegram_user_id, email_used, assign_to_user_id } = req.body;
+      const { tracking_number, box_id } = req.body;
       
       // Validate box exists if provided
       if (box_id) {
@@ -555,48 +552,7 @@ router.post(
         }
       }
       
-      let userId: number | null = null;
-      const tid = telegram_user_id != null && String(telegram_user_id).trim() !== ''
-        ? String(telegram_user_id).trim()
-        : null;
-
-      if (assign_to_user_id != null) {
-        const existing = await getUserById(Number(assign_to_user_id));
-        if (!existing) {
-          return res.status(404).json({ error: 'User not found' });
-        }
-        userId = existing.id;
-        if (tid != null) {
-          await updateUserTelegramIdentity(userId, existing.telegram_username ?? null, tid);
-          if (!existing.telegram_username?.trim()) {
-            try {
-              const username = await getTelegramUsernameByUserId(tid);
-              if (username) await updateUserTelegramIdentity(userId, username, tid);
-            } catch (err) {
-              console.error('[Tracking] Auto-fetch username for telegram_user_id', tid, err);
-            }
-          }
-        }
-      } else if (tid != null) {
-        userId = await findOrCreateUserByTelegramUserId(tid);
-        // Always fetch and save Telegram username when adding tracking so Users page shows it without manual fetch
-        try {
-          const username = await getTelegramUsernameByUserId(tid);
-          if (username && userId != null) {
-            await updateUserTelegramIdentity(userId, username, tid);
-          }
-        } catch (err) {
-          console.error('[Tracking] Auto-fetch username for telegram_user_id', tid, err);
-        }
-      }
-
-      const tracking = await createTrackingNumber(
-        tracking_number,
-        box_id || null,
-        userId,
-        null,
-        email_used?.trim() || null
-      );
+      const tracking = await createTrackingNumber(tracking_number, box_id || null);
       res.status(201).json(tracking);
     } catch (error) {
       console.error('Error creating tracking number:', error);
@@ -758,6 +714,42 @@ router.patch(
       res.json(updated);
     } catch (error) {
       console.error('Error updating tracking number box:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+// Update user for existing tracking number
+router.patch(
+  '/numbers/:id/user',
+  [body('user_id').optional({ nullable: true }).isInt()],
+  async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const { id } = req.params;
+      const { user_id } = req.body;
+      
+      // Validate user exists if provided
+      if (user_id) {
+        const user = await getUserById(Number(user_id));
+        if (!user) {
+          return res.status(404).json({ error: 'User not found' });
+        }
+      }
+      
+      const tracking = await getTrackingNumberById(Number(id));
+      if (!tracking) {
+        return res.status(404).json({ error: 'Tracking number not found' });
+      }
+
+      const updated = await updateTrackingNumberUser(Number(id), user_id || null);
+      res.json(updated);
+    } catch (error) {
+      console.error('Error updating tracking number user:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }

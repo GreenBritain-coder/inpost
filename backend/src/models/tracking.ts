@@ -350,6 +350,17 @@ export async function updateTrackingNumberBox(
   return result.rows[0] || null;
 }
 
+export async function updateTrackingNumberUser(
+  id: number,
+  userId: number | null
+): Promise<TrackingNumber | null> {
+  const result = await pool.query(
+    'UPDATE tracking_numbers SET user_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+    [userId, id]
+  );
+  return result.rows[0] || null;
+}
+
 export async function updateTrackingStatus(
   id: number,
   status: TrackingStatus,
