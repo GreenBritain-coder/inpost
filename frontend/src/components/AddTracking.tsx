@@ -413,6 +413,29 @@ export default function AddTracking() {
               required
             />
           </div>
+          <div className="form-group">
+            <label htmlFor="telegram-user-id">Telegram User ID <span className="required">*</span></label>
+            <input
+              type="text"
+              id="telegram-user-id"
+              value={telegramUserId}
+              onChange={(e) => setTelegramUserId(e.target.value)}
+              placeholder="e.g. 7744334263"
+              required
+            />
+            <small>Telegram's numeric user ID (required for linking trackings to users)</small>
+          </div>
+          <div className="form-group">
+            <label htmlFor="email-used">Email Used (optional)</label>
+            <input
+              type="text"
+              id="email-used"
+              value={emailUsed}
+              onChange={(e) => setEmailUsed(e.target.value)}
+              placeholder="e.g. user@example.com"
+            />
+            <small>Email address used for this tracking number (optional)</small>
+          </div>
           <button type="submit" disabled={loading} className="submit-btn">
             {loading ? 'Adding...' : 'Add Tracking Number'}
           </button>

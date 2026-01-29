@@ -317,6 +317,11 @@
   font-weight: 500;
 }
 
+.form-group label .required {
+  color: #e74c3c;
+  margin-left: 0.25rem;
+}
+
 .form-group input,
 .form-group textarea,
 .form-group select {
