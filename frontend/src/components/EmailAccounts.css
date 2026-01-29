@@ -1,0 +1,302 @@
+.email-accounts-container {
+  max-width: 1200px;
+  margin: 2rem auto;
+  padding: 2rem;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.email-accounts-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.email-accounts-header h2 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 1.8rem;
+}
+
+.email-accounts-intro {
+  color: #555;
+  margin-bottom: 1.5rem;
+  line-height: 1.5;
+}
+
+.email-accounts-intro strong {
+  color: #2c3e50;
+}
+
+.email-accounts-help-link {
+  display: inline-block;
+  margin-left: 0.5rem;
+  color: #3498db;
+  text-decoration: none;
+}
+
+.email-accounts-help-link:hover {
+  text-decoration: underline;
+}
+
+.email-accounts-error {
+  padding: 1rem;
+  background: #fee;
+  color: #c0392b;
+  border-left: 4px solid #e74c3c;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+/* Add/Edit Form */
+.email-accounts-form {
+  background: #f8f9fa;
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  border: 1px solid #e0e0e0;
+}
+
+.email-accounts-form h3 {
+  margin: 0 0 1rem;
+  color: #2c3e50;
+  font-size: 1.2rem;
+}
+
+.email-accounts-form-row {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.email-accounts-form-row label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  color: #555;
+  font-size: 0.9rem;
+}
+
+.email-accounts-form-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+/* Table */
+.email-accounts-table-wrap {
+  overflow-x: auto;
+}
+
+.email-accounts-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.email-accounts-table th,
+.email-accounts-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid #ecf0f1;
+}
+
+.email-accounts-table th {
+  background: #34495e;
+  color: white;
+  font-weight: 600;
+}
+
+.email-accounts-table tbody tr:hover {
+  background: #f8f9fa;
+}
+
+.email-accounts-row-inactive {
+  opacity: 0.6;
+}
+
+.email-accounts-empty {
+  text-align: center;
+  color: #7f8c8d;
+  padding: 2rem !important;
+  font-style: italic;
+}
+
+/* Inputs */
+.email-accounts-input {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.email-accounts-input:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+/* Toggle */
+.email-accounts-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.email-accounts-toggle input {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+/* Status Badge */
+.email-accounts-status-badge {
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.email-accounts-status-badge.active {
+  background: #d4edda;
+  color: #155724;
+}
+
+.email-accounts-status-badge.active:hover {
+  background: #c3e6cb;
+}
+
+.email-accounts-status-badge.inactive {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.email-accounts-status-badge.inactive:hover {
+  background: #f5c6cb;
+}
+
+/* Error/Success cells */
+.email-accounts-error-cell {
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.email-accounts-error-text {
+  color: #c0392b;
+  font-size: 0.85rem;
+}
+
+.email-accounts-success-text {
+  color: #27ae60;
+  font-size: 0.85rem;
+}
+
+/* Action buttons */
+.email-accounts-actions {
+  display: inline-flex;
+  gap: 0.5rem;
+}
+
+.email-accounts-btn {
+  padding: 0.4rem 0.8rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+}
+
+.email-accounts-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.email-accounts-btn-add {
+  background: #27ae60;
+  color: white;
+}
+
+.email-accounts-btn-add:hover:not(:disabled) {
+  background: #229954;
+}
+
+.email-accounts-btn-edit {
+  background: #3498db;
+  color: white;
+}
+
+.email-accounts-btn-edit:hover:not(:disabled) {
+  background: #2980b9;
+}
+
+.email-accounts-btn-save {
+  background: #27ae60;
+  color: white;
+}
+
+.email-accounts-btn-save:hover:not(:disabled) {
+  background: #229954;
+}
+
+.email-accounts-btn-cancel {
+  background: #95a5a6;
+  color: white;
+}
+
+.email-accounts-btn-cancel:hover:not(:disabled) {
+  background: #7f8c8d;
+}
+
+.email-accounts-btn-delete {
+  background: #c0392b;
+  color: white;
+}
+
+.email-accounts-btn-delete:hover:not(:disabled) {
+  background: #e74c3c;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .email-accounts-container {
+    padding: 1rem;
+    margin: 1rem;
+  }
+
+  .email-accounts-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+
+  .email-accounts-form-row {
+    flex-direction: column;
+  }
+
+  .email-accounts-table th,
+  .email-accounts-table td {
+    padding: 0.5rem;
+    font-size: 0.85rem;
+  }
+
+  .email-accounts-actions {
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .email-accounts-btn {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.8rem;
+  }
+}

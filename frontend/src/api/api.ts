@@ -236,6 +236,32 @@ export const api = {
     axios.post<{ username: string | null; user: UserSummary }>(`${API_URL}/tracking/users/${userId}/fetch-telegram-username`),
   deleteUser: (userId: number) =>
     axios.delete<{ message: string }>(`${API_URL}/tracking/users/${userId}`),
+
+  // Email Accounts
+  getEmailAccounts: () =>
+    axios.get<EmailAccount[]>(`${API_URL}/tracking/email-accounts`),
+  createEmailAccount: (data: {
+    email: string;
+    app_password: string;
+    phone_number?: string | null;
+    host?: string;
+    port?: number;
+  }) =>
+    axios.post<EmailAccount>(`${API_URL}/tracking/email-accounts`, data),
+  updateEmailAccount: (
+    id: number,
+    data: {
+      email?: string;
+      app_password?: string;
+      phone_number?: string | null;
+      host?: string;
+      port?: number;
+      is_active?: boolean;
+    }
+  ) =>
+    axios.patch<EmailAccount>(`${API_URL}/tracking/email-accounts/${id}`, data),
+  deleteEmailAccount: (id: number) =>
+    axios.delete<{ message: string }>(`${API_URL}/tracking/email-accounts/${id}`),
 };
 
 export interface UserSummary {
@@ -273,4 +299,17 @@ export interface DateBasedStats {
   yesterday: { not_scanned: number; scanned: number; delivered: number; cancelled: number; total: number };
   twoDaysAgo: { not_scanned: number; scanned: number; delivered: number; cancelled: number; total: number };
   threeDaysAgo: { not_scanned: number; scanned: number; delivered: number; cancelled: number; total: number };
+}
+
+export interface EmailAccount {
+  id: number;
+  email: string;
+  phone_number: string | null;
+  host: string;
+  port: number;
+  is_active: boolean;
+  last_checked_at: string | null;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
 }

@@ -5,6 +5,7 @@ import Dashboard from './components/Dashboard';
 import AddTracking from './components/AddTracking';
 import UploadCSV from './components/UploadCSV';
 import Users from './components/Users';
+import EmailAccounts from './components/EmailAccounts';
 import Analytics from './components/Analytics';
 import Logs from './components/Logs';
 import LastScanned from './components/LastScanned';
@@ -61,6 +62,16 @@ function AppRoutes() {
           <PrivateRoute>
             <Layout>
               <Users />
+            </Layout>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/email-accounts"
+        element={
+          <PrivateRoute>
+            <Layout>
+              <EmailAccounts />
             </Layout>
           </PrivateRoute>
         }

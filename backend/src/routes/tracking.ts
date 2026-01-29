@@ -1108,6 +1108,116 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Email account management endpoints
+router.get('/email-accounts', async (req: AuthRequest, res: Response) => {
+  try {
+    const { getAllEmailAccounts } = await import('../models/emailAccount');
+    const accounts = await getAllEmailAccounts();
+    res.json(accounts);
+  } catch (error) {
+    console.error('Error fetching email accounts:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post(
+  '/email-accounts',
+  [
+    body('email').isEmail().normalizeEmail(),
+    body('app_password').notEmpty().trim(),
+    body('phone_number').optional({ nullable: true }).trim(),
+    body('host').optional().trim(),
+    body('port').optional().isInt({ min: 1, max: 65535 }),
+  ],
+  async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const { email, app_password, phone_number, host, port } = req.body;
+      const { createEmailAccount } = await import('../models/emailAccount');
+      const account = await createEmailAccount(
+        email,
+        app_password,
+        phone_number || null,
+        host,
+        port
+      );
+      res.status(201).json(account);
+    } catch (error: any) {
+      console.error('Error creating email account:', error);
+      if (error.code === '23505') {
+        return res.status(409).json({ error: 'Email account already exists' });
+      }
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+router.patch(
+  '/email-accounts/:id',
+  [
+    body('email').optional().isEmail().normalizeEmail(),
+    body('app_password').optional().trim(),
+    body('phone_number').optional({ nullable: true }).trim(),
+    body('host').optional().trim(),
+    body('port').optional().isInt({ min: 1, max: 65535 }),
+    body('is_active').optional().isBoolean(),
+  ],
+  async (req: AuthRequest, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const id = parseInt(req.params.id);
+      const { email, app_password, phone_number, host, port, is_active } = req.body;
+      const { updateEmailAccount } = await import('../models/emailAccount');
+      
+      const updated = await updateEmailAccount(id, {
+        email,
+        app_password: app_password || undefined,
+        phone_number,
+        host,
+        port,
+        is_active,
+      });
+      
+      if (!updated) {
+        return res.status(404).json({ error: 'Email account not found' });
+      }
+      
+      res.json(updated);
+    } catch (error: any) {
+      console.error('Error updating email account:', error);
+      if (error.code === '23505') {
+        return res.status(409).json({ error: 'Email address already exists' });
+      }
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+);
+
+router.delete('/email-accounts/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { deleteEmailAccount } = await import('../models/emailAccount');
+    const deleted = await deleteEmailAccount(id);
+    
+    if (!deleted) {
+      return res.status(404).json({ error: 'Email account not found' });
+    }
+    
+    res.json({ message: 'Email account deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting email account:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;
 
 

@@ -58,6 +58,13 @@ export default function Layout({ children }: LayoutProps) {
               Link Telegram
             </Link>
             <Link
+              to="/email-accounts"
+              className={location.pathname === '/email-accounts' ? 'active' : ''}
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Email Accounts
+            </Link>
+            <Link
               to="/analytics"
               className={location.pathname === '/analytics' ? 'active' : ''}
               onClick={() => setMobileMenuOpen(false)}

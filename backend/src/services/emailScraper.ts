@@ -3,6 +3,7 @@ import { simpleParser } from 'mailparser';
 import { pool } from '../db/connection';
 import { createTrackingNumber } from '../models/tracking';
 import { getTelegramChatIdByUserId } from '../models/user';
+import { getActiveEmailAccounts, updateEmailAccountStatusByEmail } from '../models/emailAccount';
 
 /**
  * Parse IMAP account configuration from environment variables
@@ -25,8 +26,27 @@ interface ImapAccountConfig {
   tlsOptions?: { rejectUnauthorized: boolean };
 }
 
-function getImapAccounts(): ImapAccountConfig[] {
-  // Try JSON array format first (for multiple accounts)
+async function getImapAccounts(): Promise<ImapAccountConfig[]> {
+  // 1. Try database first (UI-configured accounts)
+  try {
+    const dbAccounts = await getActiveEmailAccounts();
+    if (dbAccounts.length > 0) {
+      console.log(`[Email Scraper] Found ${dbAccounts.length} active email account(s) in database`);
+      return dbAccounts.map(acc => ({
+        user: acc.email,
+        password: acc.app_password,
+        host: acc.host || 'imap.gmail.com',
+        port: acc.port || 993,
+        tls: true,
+        tlsOptions: { rejectUnauthorized: false },
+      }));
+    }
+  } catch (error) {
+    console.error('[Email Scraper] Error fetching email accounts from database:', error);
+    // Continue to fallback
+  }
+
+  // 2. Fall back to JSON array format from environment (for multiple accounts)
   const accountsJson = process.env.IMAP_ACCOUNTS;
   if (accountsJson) {
     try {
@@ -54,7 +74,7 @@ function getImapAccounts(): ImapAccountConfig[] {
         throw new Error('IMAP_ACCOUNTS must be a JSON array');
       }
       
-      console.log(`[Email Scraper] Successfully parsed ${accounts.length} IMAP account(s)`);
+      console.log(`[Email Scraper] Successfully parsed ${accounts.length} IMAP account(s) from env`);
       
       return accounts.map(acc => ({
         user: acc.user,
@@ -72,7 +92,7 @@ function getImapAccounts(): ImapAccountConfig[] {
     }
   }
 
-  // Fallback to single account format (backward compatible)
+  // 3. Fallback to single account format (backward compatible)
   const singleUser = process.env.IMAP_USER;
   const singlePassword = process.env.IMAP_PASSWORD;
   if (singleUser && singlePassword) {
@@ -623,20 +643,31 @@ async function checkImapAccount(account: ImapAccountConfig): Promise<void> {
  * Supports multiple email accounts for scraping InPost emails
  */
 export async function checkInPostEmails(): Promise<void> {
-  const accounts = getImapAccounts();
+  const accounts = await getImapAccounts();
   
   if (accounts.length === 0) {
     console.warn('[Email Scraper] No IMAP accounts configured, skipping email check');
-    console.warn('[Email Scraper] Configure IMAP_ACCOUNTS (JSON) or IMAP_USER/IMAP_PASSWORD (single account)');
+    console.warn('[Email Scraper] Configure accounts via Admin UI or set IMAP_ACCOUNTS (JSON) / IMAP_USER+IMAP_PASSWORD env vars');
     return;
   }
 
   console.log(`[Email Scraper] Checking ${accounts.length} email account(s)...`);
 
-  // Process all accounts sequentially to avoid overwhelming the system
-  // Each account is processed independently, so one failure doesn't stop others
+  // Process all accounts and track their status
   const results = await Promise.allSettled(
-    accounts.map(account => checkImapAccount(account))
+    accounts.map(async (account) => {
+      try {
+        await checkImapAccount(account);
+        // Update success status in database (if account is from DB)
+        await updateEmailAccountStatusByEmail(account.user, null);
+        return { user: account.user, success: true };
+      } catch (error: any) {
+        // Update error status in database (if account is from DB)
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await updateEmailAccountStatusByEmail(account.user, errorMessage);
+        throw error;
+      }
+    })
   );
 
   // Log summary

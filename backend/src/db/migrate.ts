@@ -363,6 +363,23 @@ async function migrate() {
       )
     `);
 
+    // Create email_accounts table for Gmail configuration
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS email_accounts (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        phone_number VARCHAR(50),
+        app_password VARCHAR(255) NOT NULL,
+        host VARCHAR(255) DEFAULT 'imap.gmail.com',
+        port INTEGER DEFAULT 993,
+        is_active BOOLEAN DEFAULT true,
+        last_checked_at TIMESTAMP,
+        last_error TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Create indexes
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_tracking_numbers_box_id ON tracking_numbers(box_id);
@@ -378,6 +395,7 @@ async function migrate() {
       CREATE INDEX IF NOT EXISTS idx_tracking_events_tracking_id ON tracking_events(tracking_number_id);
       CREATE INDEX IF NOT EXISTS idx_tracking_events_date ON tracking_events(event_date);
       CREATE INDEX IF NOT EXISTS idx_cleanup_logs_created_at ON cleanup_logs(created_at);
+      CREATE INDEX IF NOT EXISTS idx_email_accounts_is_active ON email_accounts(is_active) WHERE is_active = true;
     `);
 
     // Nullify postbox_id in tracking_numbers (migrate away from postboxes)
