@@ -164,6 +164,76 @@ function mapDeliveryStatus(deliveryStatus: string | null | undefined, trackingDa
   if (checkCancelledStatus()) {
     return 'cancelled';
   }
+
+  // Detect recipient pickup (Delivered) from event text when delivery_status lags behind.
+  // IMPORTANT: do NOT treat "Collected by our courier" as delivered.
+  const isRecipientPickupFromText = (): boolean => {
+    const texts: string[] = [];
+    const pushText = (v: unknown) => {
+      if (!v) return;
+      if (typeof v === 'string') {
+        const t = v.trim();
+        if (t) texts.push(t);
+        return;
+      }
+      if (typeof v === 'number' || typeof v === 'boolean') {
+        texts.push(String(v));
+        return;
+      }
+    };
+
+    pushText(deliveryStatus);
+
+    const latestEvent = trackingData?.latest_event;
+    if (latestEvent) {
+      if (typeof latestEvent === 'string') pushText(latestEvent);
+      else if (typeof latestEvent === 'object') {
+        pushText(latestEvent.description);
+        pushText(latestEvent.status);
+      }
+    }
+
+    const events = trackingData?.origin_info?.trackinfo || 
+                   trackingData?.destination_info?.trackinfo || 
+                   trackingData?.tracking_info || 
+                   trackingData?.trackinfo || 
+                   trackingData?.events || 
+                   [];
+    if (Array.isArray(events)) {
+      for (const e of events) {
+        pushText(e.tracking_detail);
+        pushText(e.description);
+        pushText(e.details);
+        pushText(e.status);
+        pushText(e.checkpoint_delivery_status);
+        pushText(e.checkpoint_status);
+      }
+    }
+
+    const haystack = texts.join(' | ').toLowerCase();
+    if (!haystack) return false;
+
+    // Explicitly exclude courier/driver collection phrasing
+    if (haystack.includes('collected by our courier') || haystack.includes('collected by courier')) {
+      return false;
+    }
+
+    const mentionsCourier = haystack.includes('courier') || haystack.includes('driver');
+    const mentionsRecipient = haystack.includes('recipient') || haystack.includes('addressee') || haystack.includes('customer');
+
+    // Avoid converting "ready for pick up" to delivered.
+    const readyForPickup = haystack.includes('ready for pick') || haystack.includes('ready to pick') || haystack.includes('ready for collection');
+    if (readyForPickup) return false;
+
+    const pickedUp = haystack.includes('picked up');
+    const collectedBy = haystack.includes('collected by');
+    const receivedBy = haystack.includes('received by');
+
+    if (mentionsRecipient && (pickedUp || collectedBy || receivedBy)) return true;
+    if (pickedUp && !mentionsCourier) return true;
+
+    return false;
+  };
   
   if (!deliveryStatus) {
     // Check if we have tracking events - if so, consider it scanned
@@ -178,7 +248,8 @@ function mapDeliveryStatus(deliveryStatus: string | null | undefined, trackingDa
   // Map to delivered status
   if (statusLower.includes('delivered') || 
       statusLower.includes('delivery completed') ||
-      statusLower.includes('delivered to recipient')) {
+      statusLower.includes('delivered to recipient') ||
+      isRecipientPickupFromText()) {
     return 'delivered';
   }
   // Map to scanned status - comprehensive list matching scraper.ts

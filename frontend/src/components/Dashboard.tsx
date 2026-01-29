@@ -25,6 +25,17 @@ const STATUS_LABELS: Record<TrackingStatus, string> = {
   cancelled: 'Cancelled',
 };
 
+const READY_FOR_PICKUP_REGEX =
+  /ready\s+for\s+pick\s*up|ready\s+for\s+pickup|ready\s+to\s+pick\s*up|ready\s+for\s+collection|pickup002/i;
+
+function getDisplayStatusLabel(tn: TrackingNumber): string {
+  if (tn.current_status === 'scanned') {
+    const text = `${tn.status_details ?? ''} ${tn.trackingmore_status ?? ''}`.trim();
+    if (READY_FOR_PICKUP_REGEX.test(text)) return 'Ready for pickup';
+  }
+  return STATUS_LABELS[tn.current_status];
+}
+
 export default function Dashboard() {
   const [trackingNumbers, setTrackingNumbers] = useState<TrackingNumber[]>([]);
   const [boxes, setBoxes] = useState<Box[]>([]);
@@ -457,7 +468,7 @@ export default function Dashboard() {
           <div className="last-update-content">
             <div className="last-update-label">Last Status Update</div>
             <div className="last-update-text">
-              <strong>{mostRecent.tracking_number}</strong> - {STATUS_LABELS[mostRecent.current_status]} 
+              <strong>{mostRecent.tracking_number}</strong> - {getDisplayStatusLabel(mostRecent)} 
               {mostRecent.box_name && ` (${mostRecent.box_name})`}
             </div>
             <div className="last-update-time">Updated {formatDate(mostRecent.updated_at)}</div>
@@ -623,7 +634,7 @@ export default function Dashboard() {
                       className="status-badge"
                       style={{ backgroundColor: STATUS_COLORS[tn.current_status] }}
                     >
-                      {STATUS_EMOJIS[tn.current_status]} {STATUS_LABELS[tn.current_status]}
+                      {STATUS_EMOJIS[tn.current_status]} {getDisplayStatusLabel(tn)}
                     </span>
                   </td>
                   <td className="status-details">{tn.status_details || '-'}</td>
@@ -789,7 +800,7 @@ export default function Dashboard() {
                     className="status-badge"
                     style={{ backgroundColor: STATUS_COLORS[tn.current_status] }}
                   >
-                    {STATUS_EMOJIS[tn.current_status]} {STATUS_LABELS[tn.current_status]}
+                    {STATUS_EMOJIS[tn.current_status]} {getDisplayStatusLabel(tn)}
                   </span>
                 </div>
                 <div className="tracking-card-details">

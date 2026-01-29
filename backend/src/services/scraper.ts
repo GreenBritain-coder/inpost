@@ -79,20 +79,29 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
                       '';
     const statusLower = statusText.toLowerCase();
     
+    // Prefer the most human-friendly status text from latest_event.description when present.
+    // TrackingMore often keeps delivery_status as "transit" while latest_event carries the useful message
+    // (e.g. "Ready for pick up, yay!").
+    const latestEventText: string | undefined = (() => {
+      const latestEvent = trackingData?.latest_event;
+      if (!latestEvent) return undefined;
+      if (typeof latestEvent === 'string') return latestEvent;
+      if (typeof latestEvent === 'object') {
+        if (latestEvent.description) return String(latestEvent.description);
+        if (latestEvent.status) return String(latestEvent.status);
+      }
+      return undefined;
+    })();
+    
     // Get the raw TrackingMore status - try multiple fields to get the most detailed status
     // latest_event is an object with description, time_iso, location - extract description
     // Priority: latest_event.description (most detailed) > delivery_status > status > sub_status
     let trackingmoreStatus: string | undefined;
-    if (trackingData?.latest_event) {
-      // latest_event is an object, extract the description or stringify it
-      if (typeof trackingData.latest_event === 'string') {
-        trackingmoreStatus = trackingData.latest_event;
-      } else if (trackingData.latest_event.description) {
-        trackingmoreStatus = trackingData.latest_event.description;
-      } else {
-        // If it's an object without description, stringify it
-        trackingmoreStatus = JSON.stringify(trackingData.latest_event);
-      }
+    if (latestEventText) {
+      trackingmoreStatus = latestEventText;
+    } else if (trackingData?.latest_event) {
+      // Fallback: latest_event exists but we couldn't extract a readable text
+      trackingmoreStatus = JSON.stringify(trackingData.latest_event);
     } else {
       trackingmoreStatus = trackingData?.delivery_status || 
                           trackingData?.status || 
@@ -102,7 +111,10 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
     }
     
     // Extract status header/description
-    const statusHeader = trackingData?.delivery_status ||
+    // Use the most informative header for the UI/logs.
+    // Prefer latest_event text over delivery_status (which is often just "transit").
+    const statusHeader = latestEventText ||
+                        trackingData?.delivery_status ||
                         trackingData?.latest_status || 
                         trackingData?.status || 
                         trackingData?.lastEvent ||
@@ -150,6 +162,63 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
           details: e.tracking_detail || e.details || e.track_location || e.location
         }))).substring(0, 500)
       : JSON.stringify(trackingData).substring(0, 500);
+
+    // Detect recipient pickup (Delivered) from event text when delivery_status lags behind.
+    // IMPORTANT: do NOT treat "Collected by our courier" as delivered.
+    const isRecipientPickupFromText = (): boolean => {
+      const texts: string[] = [];
+
+      const pushText = (v: unknown) => {
+        if (!v) return;
+        if (typeof v === 'string') {
+          const t = v.trim();
+          if (t) texts.push(t);
+          return;
+        }
+        if (typeof v === 'number' || typeof v === 'boolean') {
+          texts.push(String(v));
+          return;
+        }
+      };
+
+      pushText(trackingmoreStatus);
+      pushText(statusHeader);
+      pushText(statusText);
+
+      for (const e of parsedEvents) {
+        pushText(e.description);
+        pushText(e.status);
+        pushText(e.checkpoint_status);
+      }
+
+      const haystack = texts.join(' | ').toLowerCase();
+      if (!haystack) return false;
+
+      // Explicitly exclude courier/driver collection phrasing
+      if (haystack.includes('collected by our courier') || haystack.includes('collected by courier')) {
+        return false;
+      }
+
+      const mentionsCourier = haystack.includes('courier') || haystack.includes('driver');
+      const mentionsRecipient = haystack.includes('recipient') || haystack.includes('addressee') || haystack.includes('customer');
+
+      // Positive signals for recipient pickup
+      const pickedUp = haystack.includes('picked up');
+      const collectedBy = haystack.includes('collected by');
+      const receivedBy = haystack.includes('received by');
+
+      // Avoid converting "ready for pick up" to delivered.
+      const readyForPickup = haystack.includes('ready for pick') || haystack.includes('ready to pick') || haystack.includes('ready for collection');
+      if (readyForPickup) return false;
+
+      // Strong forms: "picked up by recipient/addressee/customer", "collected by recipient/addressee/customer"
+      if (mentionsRecipient && (pickedUp || collectedBy || receivedBy)) return true;
+
+      // We also accept generic "picked up" / "parcel picked up" *if* it's not clearly a courier action.
+      if (pickedUp && !mentionsCourier) return true;
+
+      return false;
+    };
     
     // Check if tracking exists but has no status yet (pending)
     // New API: delivery_status can be "pending" with empty trackinfo
@@ -234,9 +303,12 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
         itemReceived: itemReceived || null,
         events: parsedEvents,
       };
-    } else if (statusLower.includes('delivered') || 
+    } else if (
+        statusLower.includes('delivered') || 
         statusLower.includes('delivery completed') ||
-        statusLower.includes('delivered to recipient')) {
+        statusLower.includes('delivered to recipient') ||
+        isRecipientPickupFromText()
+      ) {
       console.log(`[${trackingNumber}] TrackingMore: Detected DELIVERED status`);
       return {
         status: 'delivered',
