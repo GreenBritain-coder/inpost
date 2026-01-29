@@ -497,6 +497,10 @@ async function processEmails(imap: Imap, results: number[], emailAccount: string
         const emailText = parsed.text || '';
         const emailHtml = parsed.html || '';
         const emailSubject = parsed.subject || '';
+        const emailFrom = parsed.from?.text || 'unknown';
+        const emailDate = parsed.date?.toISOString() || 'unknown';
+
+        console.log(`[Email Scraper] [${emailAccount}] Processing email #${seqno}: Subject="${emailSubject}", From="${emailFrom}", Date="${emailDate}"`);
 
         try {
           const success = await processEmail(emailText, emailHtml, emailSubject, emailAccount);
@@ -556,16 +560,16 @@ async function checkImapAccount(account: ImapAccountConfig): Promise<void> {
 
         // Search for emails from InPost
         // Support multiple InPost email domains: inpost.pl, inpost.co.uk, etc.
-        // Search for unread emails OR emails from last 7 days (to catch emails that were already read)
+        // Search ALL emails from last 7 days (don't rely on UNSEEN flag which Gmail sometimes delays)
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         
-        // IMAP search: unread emails from InPost OR emails from last 24 hours from InPost
-        // Use separate searches and combine, or use a more flexible approach
-        // For node-imap, we need to structure the OR correctly
+        console.log(`[Email Scraper] Searching for ALL InPost emails from last 7 days for ${account.user}...`);
+        
+        // IMAP search: all emails from InPost in the last 7 days (ignore UNSEEN status)
         // IMAP OR only supports exactly 2 arguments, so nest them
         imap.search([
-          'UNSEEN',
+          ['SINCE', sevenDaysAgo],
           ['OR', 
             ['FROM', 'inpost.pl'], 
             ['OR', 
@@ -576,47 +580,19 @@ async function checkImapAccount(account: ImapAccountConfig): Promise<void> {
         ], async (err, results) => {
           if (err) {
             console.error(`[Email Scraper] Search error for ${account.user}:`, err);
+            imap.end();
             reject(err);
             return;
           }
 
-          // If no unread emails found, also check emails from last 7 days
           if (!results || results.length === 0) {
-            console.log(`[Email Scraper] No unread emails found for ${account.user}, checking last 7 days...`);
-            // IMAP OR only supports exactly 2 arguments, so nest them
-            imap.search([
-              ['SINCE', sevenDaysAgo],
-              ['OR', 
-                ['FROM', 'inpost.pl'], 
-                ['OR', 
-                  ['FROM', 'inpost.co.uk'],
-                  ['FROM', 'inpost@inpost.co.uk']
-                ]
-              ]
-            ], async (err2, results2) => {
-              if (err2) {
-                console.error(`[Email Scraper] Search error (24h) for ${account.user}:`, err2);
-                imap.end();
-                resolve();
-                return;
-              }
-              
-              if (!results2 || results2.length === 0) {
-                console.log(`[Email Scraper] No new emails found for ${account.user}`);
-                imap.end();
-                resolve();
-                return;
-              }
-
-              console.log(`[Email Scraper] Found ${results2.length} email(s) from last 7 days for ${account.user}`);
-              await processEmails(imap, results2, account.user);
-              imap.end();
-              resolve();
-            });
+            console.log(`[Email Scraper] No InPost emails found from last 7 days for ${account.user}`);
+            imap.end();
+            resolve();
             return;
           }
 
-          console.log(`[Email Scraper] Found ${results.length} new email(s) for ${account.user}`);
+          console.log(`[Email Scraper] Found ${results.length} InPost email(s) from last 7 days for ${account.user}`);
           try {
             await processEmails(imap, results, account.user);
           } catch (error) {
