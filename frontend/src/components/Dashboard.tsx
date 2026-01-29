@@ -495,6 +495,8 @@ export default function Dashboard() {
               <th>Status Details</th>
               <th>Tracking Number</th>
               <th>Box</th>
+              <th>Pickup Code</th>
+              <th>Location</th>
               <th>TrackingMore Status</th>
               <th>Custom Timestamp</th>
               <th>Created</th>
@@ -505,7 +507,7 @@ export default function Dashboard() {
           <tbody>
             {trackingNumbers.length === 0 ? (
               <tr>
-                <td colSpan={10} className="empty-state">
+                <td colSpan={12} className="empty-state">
                   No tracking numbers found
                 </td>
               </tr>
@@ -671,6 +673,8 @@ export default function Dashboard() {
                       ))}
                     </select>
                   </td>
+                  <td>{tn.pickup_code || '-'}</td>
+                  <td>{tn.locker_id || '-'}</td>
                   <td>{tn.trackingmore_status || '-'}</td>
                   <td>
                     {renderTimestampEdit()}
@@ -829,6 +833,14 @@ export default function Dashboard() {
                         </option>
                       ))}
                     </select>
+                  </div>
+                  <div className="tracking-card-detail-row">
+                    <span className="tracking-card-detail-label">Pickup Code:</span>
+                    <span className="tracking-card-detail-value">{tn.pickup_code || '-'}</span>
+                  </div>
+                  <div className="tracking-card-detail-row">
+                    <span className="tracking-card-detail-label">Location:</span>
+                    <span className="tracking-card-detail-value">{tn.locker_id || '-'}</span>
                   </div>
                   <div className="tracking-card-detail-row">
                     <span className="tracking-card-detail-label">TrackingMore Status:</span>
