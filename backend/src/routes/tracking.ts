@@ -16,8 +16,6 @@ import {
   saveTrackingEvents,
 } from '../models/tracking';
 import { createBox, getAllBoxes, getBoxById, updateBox, deleteBox, getKingBoxes } from '../models/box';
-import { getAllUsers, getUserById, updateUserTelegramIdentity } from '../models/user';
-import { getTelegramUsernameByUserId } from '../services/telegramService';
 import { getStatusHistory, getRecentStatusChanges, getRecentScannedChanges } from '../models/statusHistory';
 import { updateAllTrackingStatuses, cleanupOldTrackingData } from '../services/scheduler';
 import { checkInPostStatus } from '../services/scraper';
@@ -437,7 +435,6 @@ router.get('/numbers', async (req: AuthRequest, res: Response) => {
     const trackingNumberSearch = req.query.trackingNumber as string | undefined;
     const unassignedOnly = req.query.unassignedOnly === 'true';
     const kingBoxId = req.query.kingBoxId ? parseInt(req.query.kingBoxId as string) : undefined;
-    const userId = req.query.userId ? parseInt(req.query.userId as string) : undefined;
     
     // Validate status if provided
     if (status && !['not_scanned', 'scanned', 'delivered'].includes(status)) {
@@ -450,10 +447,10 @@ router.get('/numbers', async (req: AuthRequest, res: Response) => {
     }
     
     // If boxId is specified, use getTrackingNumbersByBox (takes precedence)
-    // Otherwise, use getAllTrackingNumbers with optional kingBoxId and userId filters
+    // Otherwise, use getAllTrackingNumbers with optional kingBoxId filter
     const result = boxId
       ? await getTrackingNumbersByBox(boxId, page, limit, status, customTimestamp, search || trackingNumberSearch)
-      : await getAllTrackingNumbers(page, limit, status, customTimestamp, search || trackingNumberSearch, unassignedOnly, kingBoxId || null, userId ?? null);
+      : await getAllTrackingNumbers(page, limit, status, customTimestamp, search || trackingNumberSearch, unassignedOnly, kingBoxId || null);
     res.json(result);
   } catch (error) {
     console.error('Error fetching tracking numbers:', error);
@@ -922,8 +919,10 @@ router.post('/users/:id/fetch-telegram-username', async (req: AuthRequest, res: 
       await updateUserTelegramIdentity(userId, username, telegramUserId);
     }
     const updatedUser = await getUserById(userId);
+    // Return only the fetched username (no DB fallback) so the frontend can distinguish
+    // fetch success (username set) from fetch failure (username null → show error, don't reload).
     return res.json({
-      username: username ?? updatedUser?.telegram_username ?? null,
+      username: username ?? null,
       user: updatedUser,
     });
   } catch (error) {
@@ -937,7 +936,7 @@ router.get('/logs/status-changes', async (req: AuthRequest, res: Response) => {
   try {
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
     const changeType = req.query.changeType as 'status_change' | 'details_update' | undefined;
-    const status = req.query.status as 'not_scanned' | 'scanned' | 'delivered' | 'cancelled' | undefined;
+    const status = req.query.status as 'not_scanned' | 'scanned' | 'delivered' | undefined;
     const boxId = req.query.boxId ? parseInt(req.query.boxId as string) : undefined;
     const trackingNumber = req.query.trackingNumber as string | undefined;
     
