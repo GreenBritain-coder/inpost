@@ -6,21 +6,18 @@ const STATUS_COLORS = {
   not_scanned: '#e74c3c',
   scanned: '#f39c12',
   delivered: '#27ae60',
-  cancelled: '#95a5a6',
 };
 
 const STATUS_EMOJIS = {
   not_scanned: '🔴',
   scanned: '🟡',
   delivered: '🟢',
-  cancelled: '⚫',
 };
 
 const STATUS_LABELS = {
-  not_scanned: 'Not Collected',
-  scanned: 'In Transit',
-  delivered: 'Ready for Pickup',
-  cancelled: 'Cancelled',
+  not_scanned: 'Not Scanned',
+  scanned: 'Scanned by InPost',
+  delivered: 'Delivered',
 };
 
 export default function Dashboard() {
@@ -29,7 +26,7 @@ export default function Dashboard() {
   const [kingBoxes, setKingBoxes] = useState<Box[]>([]);
   const [selectedKingBox, setSelectedKingBox] = useState<number | null>(null);
   const [selectedBox, setSelectedBox] = useState<number | null | -1>(null);
-  const [selectedStatus, setSelectedStatus] = useState<'not_scanned' | 'scanned' | 'delivered' | 'cancelled' | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<'not_scanned' | 'scanned' | 'delivered' | null>(null);
   const [selectedCustomTimestamp, setSelectedCustomTimestamp] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -44,14 +41,12 @@ export default function Dashboard() {
     not_scanned: 0,
     scanned: 0,
     delivered: 0,
-    cancelled: 0,
     total: 0
   });
   const [selectedTrackingId, setSelectedTrackingId] = useState<number | null>(null);
   const [trackingEvents, setTrackingEvents] = useState<TrackingEvent[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [checkingEmails, setCheckingEmails] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -231,23 +226,10 @@ export default function Dashboard() {
     }
   };
 
-  const handleCheckEmails = async () => {
-    try {
-      setCheckingEmails(true);
-      await api.checkEmails();
-      alert('Email check completed! Pickup codes and locations have been updated. Refreshing data...');
-      loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to check emails');
-    } finally {
-      setCheckingEmails(false);
-    }
-  };
-
 
   const handleStatusChange = async (
     id: number, 
-    newStatus: 'not_scanned' | 'scanned' | 'delivered' | 'cancelled',
+    newStatus: 'not_scanned' | 'scanned' | 'delivered',
     timestamp?: string | null
   ) => {
     try {
@@ -308,14 +290,6 @@ export default function Dashboard() {
               🗑️ Delete Selected ({selectedIds.size})
             </button>
           )}
-          <button
-            onClick={handleCheckEmails}
-            disabled={checkingEmails}
-            className="refresh-btn"
-            style={{ marginRight: '0.5rem' }}
-          >
-            {checkingEmails ? 'Checking...' : '📧 Check Emails'}
-          </button>
           <button
             onClick={handleRefresh}
             disabled={refreshing}
@@ -391,16 +365,15 @@ export default function Dashboard() {
             value={selectedStatus || ''}
             onChange={(e) => {
               const value = e.target.value;
-              setSelectedStatus(value ? value as 'not_scanned' | 'scanned' | 'delivered' | 'cancelled' : null);
+              setSelectedStatus(value ? value as 'not_scanned' | 'scanned' | 'delivered' : null);
               setCurrentPage(1); // Reset to first page when filter changes
             }}
             aria-label="Filter by Status"
           >
             <option value="">All Statuses</option>
-            <option value="not_scanned">🔴 Not Collected ({stats.not_scanned})</option>
-            <option value="scanned">🟡 In Transit ({stats.scanned})</option>
-            <option value="delivered">🟢 Ready for Pickup ({stats.delivered})</option>
-            <option value="cancelled">⚫ Cancelled ({stats.cancelled})</option>
+            <option value="not_scanned">🔴 Not Scanned ({stats.not_scanned})</option>
+            <option value="scanned">🟡 Scanned ({stats.scanned})</option>
+            <option value="delivered">🟢 Delivered ({stats.delivered})</option>
           </select>
         </label>
         <label>
@@ -440,28 +413,21 @@ export default function Dashboard() {
           <div className="stat-value">
             {stats.not_scanned}
           </div>
-          <div className="stat-label">Not Collected</div>
+          <div className="stat-label">Not Scanned</div>
         </div>
         <div className="stat-card" style={{ borderColor: STATUS_COLORS.scanned }}>
           <div className="stat-emoji">{STATUS_EMOJIS.scanned}</div>
           <div className="stat-value">
             {stats.scanned}
           </div>
-          <div className="stat-label">In Transit</div>
+          <div className="stat-label">Scanned</div>
         </div>
         <div className="stat-card" style={{ borderColor: STATUS_COLORS.delivered }}>
           <div className="stat-emoji">{STATUS_EMOJIS.delivered}</div>
           <div className="stat-value">
             {stats.delivered}
           </div>
-          <div className="stat-label">Ready for Pickup</div>
-        </div>
-        <div className="stat-card" style={{ borderColor: STATUS_COLORS.cancelled }}>
-          <div className="stat-emoji">{STATUS_EMOJIS.cancelled}</div>
-          <div className="stat-value">
-            {stats.cancelled}
-          </div>
-          <div className="stat-label">Cancelled</div>
+          <div className="stat-label">Delivered</div>
         </div>
         <div className="stat-card">
           <div className="stat-value">{stats.total}</div>
@@ -502,8 +468,6 @@ export default function Dashboard() {
               </th>
               <th>Status</th>
               <th>Status Details</th>
-              <th>Pickup Code</th>
-              <th>Location</th>
               <th>Tracking Number</th>
               <th>Box</th>
               <th>TrackingMore Status</th>
@@ -516,7 +480,7 @@ export default function Dashboard() {
           <tbody>
             {trackingNumbers.length === 0 ? (
               <tr>
-                <td colSpan={12} className="empty-state">
+                <td colSpan={10} className="empty-state">
                   No tracking numbers found
                 </td>
               </tr>
@@ -649,22 +613,6 @@ export default function Dashboard() {
                     </span>
                   </td>
                   <td className="status-details">{tn.status_details || '-'}</td>
-                  <td className="pickup-code" style={{ 
-                    fontWeight: tn.pickup_code ? 'bold' : 'normal',
-                    color: tn.pickup_code ? '#27ae60' : '#999',
-                    fontSize: tn.pickup_code ? '1.1rem' : '0.9rem'
-                  }}>
-                    {tn.pickup_code || '-'}
-                  </td>
-                  <td className="locker-location" style={{
-                    fontSize: '0.85rem',
-                    maxWidth: '200px',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis'
-                  }} title={tn.locker_id || undefined}>
-                    {tn.locker_id || '-'}
-                  </td>
                   <td className="tracking-number">
                     <span 
                       style={{ cursor: 'pointer', textDecoration: 'underline', color: '#3498db' }}
@@ -721,9 +669,9 @@ export default function Dashboard() {
                         className="status-select"
                         aria-label={`Change status for tracking number ${tn.tracking_number}`}
                       >
-                        <option value="not_scanned">🔴 Not Collected</option>
-                        <option value="scanned">🟡 In Transit</option>
-                        <option value="delivered">🟢 Ready for Pickup</option>
+                        <option value="not_scanned">🔴 Not Scanned</option>
+                        <option value="scanned">🟡 Scanned</option>
+                        <option value="delivered">🟢 Delivered</option>
                       </select>
                       <button
                         onClick={() => handleRefreshSingle(tn.id)}
@@ -890,9 +838,9 @@ export default function Dashboard() {
                       className="status-select"
                       style={{ width: '100%', minHeight: '44px' }}
                     >
-                      <option value="not_scanned">🔴 Not Collected</option>
-                      <option value="scanned">🟡 In Transit</option>
-                      <option value="delivered">🟢 Ready for Pickup</option>
+                      <option value="not_scanned">🔴 Not Scanned</option>
+                      <option value="scanned">🟡 Scanned</option>
+                      <option value="delivered">🟢 Delivered</option>
                       <option value="cancelled">⚫ Cancelled</option>
                     </select>
                     <button
@@ -1023,4 +971,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
