@@ -18,7 +18,7 @@ import {
   saveTrackingEvents,
 } from '../models/tracking';
 import { createBox, getAllBoxes, getBoxById, updateBox, deleteBox, getKingBoxes } from '../models/box';
-import { updateUserTelegramIdentity, getUserById, getAllUsers } from '../models/user';
+import { updateUserTelegramIdentity, getUserById, getAllUsers, findOrCreateUserByTelegramUserId } from '../models/user';
 import { getStatusHistory, getRecentStatusChanges, getRecentScannedChanges } from '../models/statusHistory';
 import { updateAllTrackingStatuses, cleanupOldTrackingData } from '../services/scheduler';
 import { checkInPostEmails } from '../services/emailScraper';
@@ -712,13 +712,13 @@ router.post(
 );
 
 // CSV Upload endpoint: POST /api/tracking/numbers/upload-csv
-// Expected CSV format: user_id,tracking_number[,telegram_user_id][,telegram_chat_id][,email_used]
-// If telegram_user_id is present for a user, that user's Telegram ID is set on their account
-// so they can tap /tracking in the bot and get their trackers without using a start link.
+// Expected CSV format: user_id,tracking_number[,telegram_chat_id][,email_used]
+// Note: user_id in CSV is treated as Telegram user ID (not database user ID)
+// The system will find or create a user with that Telegram user ID
 // Example:
-// user_id,tracking_number,telegram_user_id
-// 123,JJD0002233573349153,7744334263
-// 456,MD000000867865453,8899445511
+// user_id,tracking_number
+// 7744334263,JJD0002233573349153
+// 8899445511,MD000000867865453
 router.post(
   '/numbers/upload-csv',
   upload.single('file'),
@@ -769,8 +769,8 @@ router.post(
 
       for (const record of records) {
         const trackingNumber = record.tracking_number?.trim();
-        const userId = record.user_id ? parseInt(record.user_id, 10) : null;
-        const telegramUserIdRaw = record.telegram_user_id != null && record.telegram_user_id !== '' ? String(record.telegram_user_id).trim() : null;
+        // user_id in CSV is treated as Telegram user ID
+        const telegramUserIdRaw = record.user_id != null && record.user_id !== '' ? String(record.user_id).trim() : null;
         const telegramChatId = record.telegram_chat_id ? BigInt(record.telegram_chat_id) : null;
         const emailUsed = record.email_used?.trim() || null;
 
@@ -784,14 +784,17 @@ router.post(
         }
 
         try {
-          // If user_id provided, ensure user exists so /start user_id will work
-          if (userId != null && !isNaN(userId)) {
-            const userExists = await getUserById(userId);
-            if (!userExists) {
+          // Find or create user by Telegram user ID
+          let databaseUserId: number | null = null;
+          if (telegramUserIdRaw) {
+            try {
+              databaseUserId = await findOrCreateUserByTelegramUserId(telegramUserIdRaw);
+              console.log(`[CSV] Found/created user with database ID ${databaseUserId} for Telegram user ID ${telegramUserIdRaw}`);
+            } catch (e) {
               results.push({
                 tracking_number: trackingNumber,
                 status: 'error',
-                message: `User ID ${userId} not found`
+                message: `Failed to find/create user for Telegram user ID ${telegramUserIdRaw}: ${e instanceof Error ? e.message : 'Unknown error'}`
               });
               continue;
             }
@@ -812,31 +815,21 @@ router.post(
             continue;
           }
 
-          // Create tracking number
+          // Create tracking number with database user ID
           await createTrackingNumber(
             trackingNumber,
             null, // box_id (can be set later via UI)
-            userId,
+            databaseUserId,
             telegramChatId,
             emailUsed
           );
-
-          // If row has user_id + telegram_user_id, set that user's Telegram ID on their account
-          // so they can tap /tracking in the bot and get their trackers
-          if (userId != null && !isNaN(userId) && telegramUserIdRaw) {
-            try {
-              await updateUserTelegramIdentity(userId, null, telegramUserIdRaw);
-            } catch (e) {
-              console.warn(`[CSV] Could not set telegram_user_id for user ${userId}:`, e);
-            }
-          }
 
           results.push({
             tracking_number: trackingNumber,
             status: 'created',
           });
-          if (userId != null && !isNaN(userId)) {
-            createdUserIds.add(userId);
+          if (databaseUserId != null) {
+            createdUserIds.add(databaseUserId);
           }
         } catch (error) {
           console.error(`Error creating tracking ${trackingNumber}:`, error);

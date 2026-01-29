@@ -71,7 +71,7 @@ export default function UploadCSV() {
   };
 
   const downloadTemplate = () => {
-    const template = 'user_id,tracking_number,telegram_user_id,telegram_chat_id,email_used\n123,JJD0002233573349153,7744334263,,user@example.com\n456,MD000000867865453,8899445511,,';
+    const template = 'user_id,tracking_number,telegram_chat_id,email_used\n7744334263,JJD0002233573349153,,user@example.com\n8899445511,MD000000867865453,,';
     const blob = new Blob([template], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -92,15 +92,18 @@ export default function UploadCSV() {
 
       <div className="upload-instructions">
         <h3>CSV Format</h3>
-        <p>Your CSV file should have the following columns (header row required). Rows with <strong>user_id</strong> assign trackings to that user:</p>
+        <p>Your CSV file should have the following columns (header row required). The system will automatically find or create users based on the <strong>user_id</strong> (Telegram user ID):</p>
         <ul>
           <li><strong>tracking_number</strong> (required) - InPost tracking number</li>
-          <li><strong>user_id</strong> (optional) - Backend user ID. Assigns this tracking to that user.</li>
-          <li><strong>telegram_user_id</strong> (optional) - Telegram user ID (from.id). If present, it is set on that user’s account so they can open the bot and tap /tracking to see their trackers (no start link needed).</li>
+          <li><strong>user_id</strong> (optional) - <strong>Telegram user ID</strong> (Telegram's numeric ID, e.g., 7744334263). The system will find or create a user with this Telegram ID and link the tracking to them.</li>
           <li><strong>telegram_chat_id</strong> (optional) - Only if you need manual chat linking.</li>
           <li><strong>email_used</strong> (optional) - Email address used for this tracking</li>
         </ul>
-        <p className="example-note">Example: <code>user_id,tracking_number,telegram_user_id</code> — include <strong>telegram_user_id</strong> so when they tap /tracking it’s already done.</p>
+        <p className="example-note">
+          <strong>Note:</strong> <code>user_id</code> in CSV is treated as <strong>Telegram user ID</strong> (not database user ID). 
+          The system automatically creates users if they don't exist. After upload, you'll get <code>/start</code> links using database user IDs to share with users.
+        </p>
+        <p className="example-note">Example: <code>user_id,tracking_number</code> — <code>7744334263,JJD0002233573349153</code></p>
       </div>
 
       <div className="upload-area">

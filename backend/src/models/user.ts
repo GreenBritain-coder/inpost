@@ -108,3 +108,50 @@ export async function verifyPassword(user: User, password: string): Promise<bool
   return bcrypt.compare(password, user.password_hash);
 }
 
+/** Find or create a user by Telegram user ID. Returns the database user ID. */
+export async function findOrCreateUserByTelegramUserId(telegramUserId: string | number | bigint): Promise<number> {
+  const tid = String(telegramUserId);
+  
+  // First, try to find existing user by telegram_user_id
+  const existing = await pool.query('SELECT id FROM users WHERE telegram_user_id = $1', [tid]);
+  if (existing.rows[0]) {
+    return existing.rows[0].id;
+  }
+  
+  // If not found, create a new user with a placeholder email
+  // Email format: telegram_<telegram_user_id>@telegram.local
+  const placeholderEmail = `telegram_${tid}@telegram.local`;
+  const passwordHash = await bcrypt.hash(`telegram_${tid}_${Date.now()}`, 10);
+  
+  try {
+    // Try to insert new user
+    const result = await pool.query(
+      `INSERT INTO users (email, password_hash, telegram_user_id) 
+       VALUES ($1, $2, $3) 
+       RETURNING id`,
+      [placeholderEmail, passwordHash, tid]
+    );
+    
+    if (result.rows[0]) {
+      return result.rows[0].id;
+    }
+  } catch (error: any) {
+    // If email already exists (unique constraint), update that user's telegram_user_id
+    if (error.code === '23505' && error.constraint === 'users_email_key') {
+      const byEmail = await pool.query('SELECT id FROM users WHERE email = $1', [placeholderEmail]);
+      if (byEmail.rows[0]) {
+        await pool.query('UPDATE users SET telegram_user_id = $1 WHERE id = $2', [tid, byEmail.rows[0].id]);
+        return byEmail.rows[0].id;
+      }
+    }
+    // If it's a different error, check one more time if user was created by another process
+    const retry = await pool.query('SELECT id FROM users WHERE telegram_user_id = $1', [tid]);
+    if (retry.rows[0]) {
+      return retry.rows[0].id;
+    }
+    throw error;
+  }
+  
+  throw new Error('Failed to create or find user');
+}
+

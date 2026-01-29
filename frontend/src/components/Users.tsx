@@ -75,8 +75,12 @@ export default function Users() {
         <h2>Link Telegram (Users)</h2>
       </div>
       <p className="users-intro">
-        Link users to Telegram so they can open the bot and tap <strong>/tracking</strong> to see their trackings.
-        Set their <strong>Telegram user ID</strong> (the numeric ID from Telegram). You can also share their personal link so they link via Start.
+        When uploading tracking numbers via CSV, use <strong>Telegram user ID</strong> (Telegram's numeric ID, e.g., 7744334263) in the <code>user_id</code> column. 
+        The system will automatically find or create users with that Telegram ID.
+        <br/><br/>
+        <strong>User ID</strong> shown here is the database ID (1, 2, 3...). Share the <strong>Personal link</strong> so users can link via <strong>/start USER_ID</strong>.
+        <br/><br/>
+        <strong>Telegram user ID</strong> column shows the Telegram ID that was set (either from CSV upload or manually). This allows automatic matching when users use <strong>/start</strong> without a number.
       </p>
 
       {error && (
@@ -87,9 +91,8 @@ export default function Users() {
         <table className="users-table">
           <thead>
             <tr>
-              <th>ID</th>
-              <th>Email</th>
-              <th>Telegram user ID</th>
+              <th>User ID<br/><span className="users-th-subtitle">(Database ID)</span></th>
+              <th>Telegram user ID<br/><span className="users-th-subtitle">(Telegram's ID)</span></th>
               <th>Telegram @username</th>
               <th>Personal link</th>
               <th></th>
@@ -98,8 +101,7 @@ export default function Users() {
           <tbody>
             {users.map((u) => (
               <tr key={u.id}>
-                <td>{u.id}</td>
-                <td>{u.email}</td>
+                <td><strong>{u.id}</strong></td>
                 <td>
                   {editingId === u.id ? (
                     <input
@@ -128,7 +130,7 @@ export default function Users() {
                 </td>
                 <td>
                   <a href={startLink(u.id)} target="_blank" rel="noopener noreferrer" className="users-link">
-                    Start link
+                    /start {u.id}
                   </a>
                 </td>
                 <td>

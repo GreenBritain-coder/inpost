@@ -59,6 +59,11 @@
   font-weight: 600;
 }
 
+.users-th-subtitle {
+  font-size: 0.85rem;
+  font-weight: normal;
+}
+
 .users-table tbody tr:hover {
   background: #f8f9fa;
 }
@@ -79,6 +84,7 @@
 .users-link:hover {
   text-decoration: underline;
 }
+
 
 .users-actions {
   display: inline-flex;
