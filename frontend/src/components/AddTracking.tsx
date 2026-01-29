@@ -127,6 +127,7 @@ export default function AddTracking() {
   const handleSingleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!trackingNumber.trim()) return;
+    if (!telegramUserId.trim()) return;
 
     setLoading(true);
     setMessage(null);
@@ -413,15 +414,16 @@ export default function AddTracking() {
             />
           </div>
           <div className="form-group">
-            <label htmlFor="telegram-user-id">Telegram User ID (optional)</label>
+            <label htmlFor="telegram-user-id">Telegram User ID *</label>
             <input
               type="text"
               id="telegram-user-id"
               value={telegramUserId}
               onChange={(e) => setTelegramUserId(e.target.value)}
               placeholder="e.g. 7744334263"
+              required
             />
-            <small>For linking: when this user does /start in Telegram they&apos;ll see this tracking. Same as CSV: user_id,tracking_number</small>
+            <small>Required for linking: when this user does /start in Telegram they&apos;ll see this tracking. Same as CSV: user_id,tracking_number</small>
           </div>
           <div className="form-group">
             <label htmlFor="email-used">Email Used (optional)</label>

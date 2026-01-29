@@ -1,7 +1,5 @@
 import express, { Response, Request } from 'express';
 import { body, validationResult } from 'express-validator';
-import multer from 'multer';
-import { parse } from 'csv-parse/sync';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import {
   createTrackingNumber,
@@ -18,26 +16,12 @@ import {
   saveTrackingEvents,
 } from '../models/tracking';
 import { createBox, getAllBoxes, getBoxById, updateBox, deleteBox, getKingBoxes } from '../models/box';
-import { updateUserTelegramIdentity, getUserById, getAllUsers, findOrCreateUserByTelegramUserId } from '../models/user';
+import { findOrCreateUserByTelegramUserId } from '../models/user';
 import { getStatusHistory, getRecentStatusChanges, getRecentScannedChanges } from '../models/statusHistory';
 import { updateAllTrackingStatuses, cleanupOldTrackingData } from '../services/scheduler';
-import { checkInPostEmails } from '../services/emailScraper';
 import { checkInPostStatus } from '../services/scraper';
 import { pool } from '../db/connection';
 import { verifyToken } from '../services/auth';
-
-// Configure multer for CSV file uploads (memory storage)
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only CSV files are allowed'));
-    }
-  },
-});
 
 const router = express.Router();
 
@@ -167,11 +151,6 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
   // Send heartbeat more frequently initially to keep connection alive
   const sendHeartbeat = () => {
     if (!isConnectionOpen) return;
-    // Check if response is still writable
-    if (res.writableEnded || res.destroyed) {
-      isConnectionOpen = false;
-      return;
-    }
     try {
       res.write(`data: ${JSON.stringify({ 
         type: 'heartbeat', 
@@ -182,15 +161,6 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
         nodeRes.flush();
       }
     } catch (error) {
-      // Ignore write errors if connection is already closed
-      if (error instanceof Error && (
-        error.message.includes('write after end') ||
-        error.message.includes('destroyed') ||
-        error.message.includes('aborted')
-      )) {
-        isConnectionOpen = false;
-        return;
-      }
       console.error('Error sending heartbeat:', error);
       isConnectionOpen = false;
     }
@@ -235,42 +205,24 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
       );
       
       if (newLogs.rows.length > 0 && isConnectionOpen) {
-        // Check if response is still writable
-        if (res.writableEnded || res.destroyed) {
-          isConnectionOpen = false;
-          return;
+        // Send new logs to client
+        res.write(`data: ${JSON.stringify({ 
+          type: 'logs', 
+          logs: newLogs.rows,
+          timestamp: new Date().toISOString()
+        })}\n\n`);
+        
+        const nodeRes = res as any;
+        if (typeof nodeRes.flush === 'function') {
+          nodeRes.flush();
         }
-        try {
-          // Send new logs to client
-          res.write(`data: ${JSON.stringify({ 
-            type: 'logs', 
-            logs: newLogs.rows,
-            timestamp: new Date().toISOString()
-          })}\n\n`);
-          
-          const nodeRes = res as any;
-          if (typeof nodeRes.flush === 'function') {
-            nodeRes.flush();
-          }
-          
-          // Update last check time to the most recent log
-          lastCheck = newLogs.rows[0].changed_at;
-        } catch (error) {
-          // Ignore write errors if connection is already closed
-          if (error instanceof Error && (
-            error.message.includes('write after end') ||
-            error.message.includes('destroyed') ||
-            error.message.includes('aborted')
-          )) {
-            isConnectionOpen = false;
-            return;
-          }
-          throw error; // Re-throw unexpected errors
-        }
+        
+        // Update last check time to the most recent log
+        lastCheck = newLogs.rows[0].changed_at;
       }
     } catch (error) {
       console.error('Error in SSE stream:', error);
-      if (isConnectionOpen && !res.writableEnded && !res.destroyed) {
+      if (isConnectionOpen) {
         try {
           res.write(`data: ${JSON.stringify({ 
             type: 'error', 
@@ -282,73 +234,48 @@ router.get('/logs/stream', async (req: Request, res: Response) => {
             nodeRes.flush();
           }
         } catch (writeError) {
-          // Ignore write errors if connection is already closed
-          if (writeError instanceof Error && (
-            writeError.message.includes('write after end') ||
-            writeError.message.includes('destroyed') ||
-            writeError.message.includes('aborted')
-          )) {
-            isConnectionOpen = false;
-          } else {
-            console.error('Error writing error message:', writeError);
-            isConnectionOpen = false;
-          }
+          console.error('Error writing error message:', writeError);
+          isConnectionOpen = false;
         }
       }
     }
   }, 2000); // Check every 2 seconds
   
   // Clean up on client disconnect
-  let cleanupCalled = false;
-  const cleanup = (reason?: string) => {
-    if (cleanupCalled) return; // Prevent duplicate cleanup
-    cleanupCalled = true;
+  const cleanup = () => {
+    if (!isConnectionOpen) return; // Already cleaned up
     isConnectionOpen = false;
     clearInterval(checkInterval);
     clearInterval(heartbeatInterval);
-    if (reason) {
-      console.log(`SSE connection cleaned up for user: ${payload.email} (${reason})`);
-    } else {
-      console.log(`SSE connection cleaned up for user: ${payload.email}`);
-    }
+    console.log('SSE connection cleaned up for user:', payload.email);
     try {
-      if (!res.writableEnded && !res.destroyed) {
-        res.end();
-      }
+      res.end();
     } catch (error) {
-      // Connection might already be closed - ignore
+      // Connection might already be closed
     }
   };
   
   req.on('close', () => {
-    cleanup('client closed connection');
+    console.log('SSE client disconnected (req.close) for user:', payload.email);
+    cleanup();
   });
   
-  // Handle request errors - "aborted" and ECONNRESET are normal when client disconnects
-  req.on('error', (error: any) => {
-    // Don't log "aborted" or ECONNRESET as errors - these are normal disconnects
-    if (error.code === 'ECONNRESET' || error.message === 'aborted') {
-      cleanup('client disconnected');
-    } else {
-      console.error('SSE request error:', error);
-      cleanup('request error');
-    }
+  // Also handle errors
+  req.on('error', (error) => {
+    console.error('SSE request error:', error);
+    cleanup();
   });
   
   // Handle response errors
-  res.on('error', (error: any) => {
-    // Don't log "aborted" or ECONNRESET as errors
-    if (error.code === 'ECONNRESET' || error.message === 'aborted') {
-      cleanup('response closed');
-    } else {
-      console.error('SSE response error:', error);
-      cleanup('response error');
-    }
+  res.on('error', (error) => {
+    console.error('SSE response error:', error);
+    cleanup();
   });
   
   // Handle response finish
   res.on('finish', () => {
-    cleanup('response finished');
+    console.log('SSE response finished for user:', payload.email);
+    cleanup();
   });
 });
 
@@ -503,7 +430,7 @@ router.get('/numbers', async (req: AuthRequest, res: Response) => {
     const boxId = req.query.boxId ? parseInt(req.query.boxId as string) : undefined;
     const page = req.query.page ? parseInt(req.query.page as string) : 1;
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
-    const status = req.query.status as 'not_scanned' | 'scanned' | 'delivered' | 'cancelled' | undefined;
+    const status = req.query.status as 'not_scanned' | 'scanned' | 'delivered' | undefined;
     const customTimestamp = req.query.customTimestamp as string | undefined;
     const search = req.query.search as string | undefined;
     const trackingNumberSearch = req.query.trackingNumber as string | undefined;
@@ -511,7 +438,7 @@ router.get('/numbers', async (req: AuthRequest, res: Response) => {
     const kingBoxId = req.query.kingBoxId ? parseInt(req.query.kingBoxId as string) : undefined;
     
     // Validate status if provided
-    if (status && !['not_scanned', 'scanned', 'delivered', 'cancelled'].includes(status)) {
+    if (status && !['not_scanned', 'scanned', 'delivered'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status filter' });
     }
     
@@ -608,10 +535,6 @@ router.post(
   [
     body('tracking_number').notEmpty().trim(),
     body('box_id').optional().isInt(),
-    body('user_id').optional().isInt(),
-    body('telegram_user_id').optional(), // Telegram from.id — for linking when user does /start (string or number)
-    body('telegram_chat_id').optional().isInt().toInt(),
-    body('email_used').optional().isEmail().normalizeEmail(),
   ],
   async (req: AuthRequest, res: Response) => {
     const errors = validationResult(req);
@@ -620,7 +543,7 @@ router.post(
     }
 
     try {
-      const { tracking_number, box_id, user_id, telegram_user_id, telegram_chat_id, email_used } = req.body;
+      const { tracking_number, box_id } = req.body;
       
       // Validate box exists if provided
       if (box_id) {
@@ -629,27 +552,8 @@ router.post(
           return res.status(404).json({ error: 'Box not found' });
         }
       }
-
-      // Resolve Telegram user ID to database user_id for linking (same as CSV upload)
-      let databaseUserId: number | null = user_id || null;
-      if (telegram_user_id != null && String(telegram_user_id).trim() !== '') {
-        try {
-          databaseUserId = await findOrCreateUserByTelegramUserId(String(telegram_user_id).trim());
-        } catch (e) {
-          return res.status(400).json({
-            error: 'Failed to find/create user for Telegram User ID',
-            details: e instanceof Error ? e.message : 'Unknown error',
-          });
-        }
-      }
       
-      const tracking = await createTrackingNumber(
-        tracking_number, 
-        box_id || null,
-        databaseUserId,
-        telegram_chat_id || null,
-        email_used || null
-      );
+      const tracking = await createTrackingNumber(tracking_number, box_id || null);
       res.status(201).json(tracking);
     } catch (error) {
       console.error('Error creating tracking number:', error);
@@ -721,172 +625,6 @@ router.post(
     } catch (error) {
       console.error('Error bulk creating tracking numbers:', error);
       res.status(500).json({ error: 'Internal server error' });
-    }
-  }
-);
-
-// CSV Upload endpoint: POST /api/tracking/numbers/upload-csv
-// Required CSV format: tracking_number
-// Optional columns: user_id (Telegram user ID), telegram_chat_id, email_used
-// Note: user_id in CSV is treated as Telegram user ID (not database user ID)
-// The system will find or create a user with that Telegram user ID if provided
-// Examples:
-// Minimal (tracking only): tracking_number
-// JJD0002233573349153
-// 
-// With user: user_id,tracking_number
-// 7744334263,JJD0002233573349153
-router.post(
-  '/numbers/upload-csv',
-  upload.single('file'),
-  async (req: AuthRequest, res: Response) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ error: 'No file uploaded' });
-      }
-
-      // Parse CSV from buffer
-      const csvContent = req.file.buffer.toString('utf-8');
-      
-      let records: any[];
-      try {
-        records = parse(csvContent, {
-          columns: true, // First row as headers
-          skip_empty_lines: true,
-          trim: true,
-        });
-      } catch (parseError) {
-        console.error('CSV parse error:', parseError);
-        return res.status(400).json({ 
-          error: 'Invalid CSV format',
-          details: parseError instanceof Error ? parseError.message : 'Unknown error'
-        });
-      }
-
-      if (records.length === 0) {
-        return res.status(400).json({ error: 'CSV file is empty' });
-      }
-
-      // Validate CSV has required columns
-      const firstRecord = records[0];
-      if (!firstRecord.hasOwnProperty('tracking_number')) {
-        return res.status(400).json({ 
-          error: 'CSV must have a "tracking_number" column',
-          found_columns: Object.keys(firstRecord)
-        });
-      }
-
-      // Process each row
-      const results: Array<{ 
-        tracking_number: string; 
-        status: 'created' | 'duplicate' | 'error'; 
-        message?: string;
-      }> = [];
-      const createdUserIds = new Set<number>();
-
-      for (const record of records) {
-        const trackingNumber = record.tracking_number?.trim() || '';
-        // user_id in CSV is treated as Telegram user ID (optional)
-        const telegramUserIdRaw = record.user_id != null && record.user_id !== '' ? String(record.user_id).trim() : null;
-        // telegram_chat_id is optional - only needed for manual chat linking
-        const telegramChatId = record.telegram_chat_id ? BigInt(record.telegram_chat_id) : null;
-        const emailUsed = record.email_used?.trim() || null;
-
-        if (!trackingNumber) {
-          results.push({
-            tracking_number: 'N/A',
-            status: 'error',
-            message: 'Missing tracking number'
-          });
-          continue;
-        }
-
-        try {
-          // Find or create user by Telegram user ID
-          let databaseUserId: number | null = null;
-          if (telegramUserIdRaw) {
-            try {
-              databaseUserId = await findOrCreateUserByTelegramUserId(telegramUserIdRaw);
-              console.log(`[CSV] Found/created user with database ID ${databaseUserId} for Telegram user ID ${telegramUserIdRaw}`);
-            } catch (e) {
-              results.push({
-                tracking_number: trackingNumber,
-                status: 'error',
-                message: `Failed to find/create user for Telegram user ID ${telegramUserIdRaw}: ${e instanceof Error ? e.message : 'Unknown error'}`
-              });
-              continue;
-            }
-          }
-
-          // Check if tracking number already exists
-          const existing = await pool.query(
-            'SELECT id FROM tracking_numbers WHERE tracking_number = $1',
-            [trackingNumber]
-          );
-
-          if (existing.rows.length > 0) {
-            results.push({
-              tracking_number: trackingNumber,
-              status: 'duplicate',
-              message: 'Tracking number already exists'
-            });
-            continue;
-          }
-
-          // Create tracking number with database user ID
-          await createTrackingNumber(
-            trackingNumber,
-            null, // box_id (can be set later via UI)
-            databaseUserId,
-            telegramChatId,
-            emailUsed
-          );
-
-          results.push({
-            tracking_number: trackingNumber,
-            status: 'created',
-          });
-          if (databaseUserId != null) {
-            createdUserIds.add(databaseUserId);
-          }
-        } catch (error) {
-          console.error(`Error creating tracking ${trackingNumber}:`, error);
-          results.push({
-            tracking_number: trackingNumber,
-            status: 'error',
-            message: error instanceof Error ? error.message : 'Unknown error'
-          });
-        }
-      }
-
-      const successCount = results.filter(r => r.status === 'created').length;
-      const duplicateCount = results.filter(r => r.status === 'duplicate').length;
-      const errorCount = results.filter(r => r.status === 'error').length;
-
-      // Build /start user_id links for each unique user so admin can send them
-      const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'GB_Track_Bot';
-      const user_links = Array.from(createdUserIds).sort((a, b) => a - b).map(uid => ({
-        user_id: uid,
-        link: `https://t.me/${botUsername}?start=${uid}`,
-      }));
-
-      res.status(201).json({
-        message: `Processed ${records.length} rows: ${successCount} created, ${duplicateCount} duplicates, ${errorCount} errors`,
-        summary: {
-          total: records.length,
-          created: successCount,
-          duplicates: duplicateCount,
-          errors: errorCount,
-        },
-        user_links,
-        results,
-      });
-    } catch (error) {
-      console.error('Error processing CSV upload:', error);
-      res.status(500).json({ 
-        error: 'Internal server error',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      });
     }
   }
 );
@@ -1065,27 +803,11 @@ router.post('/cleanup', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// Manual email check - trigger InPost email scan (pickup codes, locations)
-router.post('/check-emails', async (req: AuthRequest, res: Response) => {
-  try {
-    await checkInPostEmails();
-    res.json({
-      message: 'Email check completed. Check logs for details.',
-    });
-  } catch (error) {
-    console.error('Error running email check:', error);
-    res.status(500).json({
-      error: 'Failed to run email check',
-      details: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-});
-
 // Manual status update endpoint - update a single tracking number's status
 router.patch(
   '/numbers/:id/status',
   [
-    body('status').isIn(['not_scanned', 'scanned', 'delivered', 'cancelled']),
+    body('status').isIn(['not_scanned', 'scanned', 'delivered']),
     body('custom_timestamp').optional({ nullable: true, checkFalsy: true }).isISO8601().toDate(),
   ],
   async (req: AuthRequest, res: Response) => {
@@ -1128,126 +850,12 @@ router.patch(
   }
 );
 
-// Update user/telegram/email info for existing tracking number
-// This allows manually uploaded tracking numbers to receive pickup codes via Telegram
-router.patch(
-  '/numbers/:id/user-info',
-  [
-    body('user_id').optional().isInt(),
-    body('telegram_chat_id').optional().isInt().toInt(),
-    body('email_used').optional().isEmail().normalizeEmail(),
-  ],
-  async (req: AuthRequest, res: Response) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    try {
-      const { id } = req.params;
-      const { user_id, telegram_chat_id, email_used } = req.body;
-      
-      const tracking = await getTrackingNumberById(Number(id));
-      if (!tracking) {
-        return res.status(404).json({ error: 'Tracking number not found' });
-      }
-
-      // Update user info fields
-      const result = await pool.query(
-        `UPDATE tracking_numbers 
-         SET user_id = COALESCE($1, user_id),
-             telegram_chat_id = COALESCE($2, telegram_chat_id),
-             email_used = COALESCE($3, email_used)
-         WHERE id = $4
-         RETURNING *`,
-        [
-          user_id || null,
-          telegram_chat_id ? BigInt(telegram_chat_id).toString() : null,
-          email_used || null,
-          Number(id)
-        ]
-      );
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Tracking number not found' });
-      }
-
-      console.log(`Updated user info for tracking ${id}: user_id=${user_id || 'unchanged'}, telegram_chat_id=${telegram_chat_id || 'unchanged'}, email_used=${email_used || 'unchanged'}`);
-      
-      // Get updated tracking with joins
-      const allTracking = await getAllTrackingNumbers(1, 10000);
-      const updated = allTracking.data.find(t => t.id === Number(id));
-      
-      res.json(updated);
-    } catch (error) {
-      console.error('Error updating tracking user info:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  }
-);
-
-// List users (for dashboard — link Telegram)
-router.get('/users', async (req: AuthRequest, res: Response) => {
-  try {
-    const users = await getAllUsers();
-    res.json(users);
-  } catch (error) {
-    console.error('Error listing users:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Update a user's Telegram identity (for automatic linking when they /start the bot)
-// Set telegram_username (@username) or telegram_user_id (Telegram's from.id) so the bot can match them on /start
-router.patch(
-  '/users/:id/telegram',
-  [
-    body('telegram_username').optional({ nullable: true }).trim(),
-    body('telegram_user_id').optional({ nullable: true }),
-  ],
-  async (req: AuthRequest, res: Response) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    try {
-      const userId = parseInt(req.params.id, 10);
-      if (isNaN(userId)) {
-        return res.status(400).json({ error: 'Invalid user ID' });
-      }
-
-      const user = await getUserById(userId);
-      if (!user) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-
-      const { telegram_username, telegram_user_id } = req.body;
-      const updated = await updateUserTelegramIdentity(
-        userId,
-        telegram_username ?? null,
-        telegram_user_id ?? null
-      );
-
-      if (!updated) {
-        return res.status(500).json({ error: 'Failed to update user Telegram identity' });
-      }
-
-      const updatedUser = await getUserById(userId);
-      res.json(updatedUser);
-    } catch (error) {
-      console.error('Error updating user Telegram identity:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  }
-);
-
 // Logs endpoints
 router.get('/logs/status-changes', async (req: AuthRequest, res: Response) => {
   try {
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
     const changeType = req.query.changeType as 'status_change' | 'details_update' | undefined;
-    const status = req.query.status as 'not_scanned' | 'scanned' | 'delivered' | 'cancelled' | undefined;
+    const status = req.query.status as 'not_scanned' | 'scanned' | 'delivered' | undefined;
     const boxId = req.query.boxId ? parseInt(req.query.boxId as string) : undefined;
     const trackingNumber = req.query.trackingNumber as string | undefined;
     
@@ -1289,10 +897,10 @@ router.get('/logs/first-scans', async (req: AuthRequest, res: Response) => {
 
     // Initialize default structure
     const stats = {
-      today: { not_scanned: 0, scanned: 0, delivered: 0, cancelled: 0, total: 0 },
-      yesterday: { not_scanned: 0, scanned: 0, delivered: 0, cancelled: 0, total: 0 },
-      twoDaysAgo: { not_scanned: 0, scanned: 0, delivered: 0, cancelled: 0, total: 0 },
-      threeDaysAgo: { not_scanned: 0, scanned: 0, delivered: 0, cancelled: 0, total: 0 }
+      today: { not_scanned: 0, scanned: 0, delivered: 0, total: 0 },
+      yesterday: { not_scanned: 0, scanned: 0, delivered: 0, total: 0 },
+      twoDaysAgo: { not_scanned: 0, scanned: 0, delivered: 0, total: 0 },
+      threeDaysAgo: { not_scanned: 0, scanned: 0, delivered: 0, total: 0 }
     };
 
     // Get date strings in YYYY-MM-DD format for comparison
@@ -1327,7 +935,7 @@ router.get('/logs/first-scans', async (req: AuthRequest, res: Response) => {
       }
 
       if (target) {
-        const status = row.current_status as 'not_scanned' | 'scanned' | 'delivered' | 'cancelled';
+        const status = row.current_status as 'not_scanned' | 'scanned' | 'delivered';
         const count = parseInt(row.count);
         stats[target][status] = count;
         stats[target].total += count;
@@ -1372,4 +980,3 @@ router.get('/cleanup-logs', async (req: AuthRequest, res: Response) => {
 });
 
 export default router;
-
