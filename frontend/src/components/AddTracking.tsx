@@ -11,6 +11,8 @@ export default function AddTracking() {
   const [newBoxParentId, setNewBoxParentId] = useState<number | null>(null);
   const [showNewBox, setShowNewBox] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState('');
+  const [telegramUserId, setTelegramUserId] = useState('');
+  const [emailUsed, setEmailUsed] = useState('');
   const [bulkTrackingNumbers, setBulkTrackingNumbers] = useState('');
   const [bulkCustomTimestamp, setBulkCustomTimestamp] = useState('');
   const [mode, setMode] = useState<'single' | 'bulk'>('single');
@@ -125,13 +127,21 @@ export default function AddTracking() {
   const handleSingleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!trackingNumber.trim()) return;
+    if (!telegramUserId.trim()) return;
 
     setLoading(true);
     setMessage(null);
 
     try {
-      await api.createTrackingNumber(trackingNumber.trim(), selectedBox || undefined);
+      await api.createTrackingNumber(
+        trackingNumber.trim(),
+        selectedBox || undefined,
+        telegramUserId.trim() || undefined,
+        emailUsed.trim() || undefined
+      );
       setTrackingNumber('');
+      setTelegramUserId('');
+      setEmailUsed('');
       setMessage({ type: 'success', text: 'Tracking number added successfully' });
     } catch (error: any) {
       setMessage({
