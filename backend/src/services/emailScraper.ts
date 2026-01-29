@@ -400,6 +400,8 @@ async function processEmail(emailText: string, emailHtml: string, emailSubject: 
   let processedSomething = false;
 
   // Process send code (drop-off email)
+  // NOTE: Send codes are ADMIN-ONLY and should NOT be sent to users via Telegram
+  // They are stored in the database for admin viewing only
   if (sendCode) {
     console.log(`[Email Scraper] Found SEND code for ${trackingNumber}: ${sendCode}`);
     if (recipientName) {
@@ -407,30 +409,12 @@ async function processEmail(emailText: string, emailHtml: string, emailSubject: 
     }
     
     if (match.send_code_sent_at) {
-      console.log(`[Email Scraper] Send code already sent for ${trackingNumber} at ${match.send_code_sent_at}, skipping duplicate`);
+      console.log(`[Email Scraper] Send code already stored for ${trackingNumber} at ${match.send_code_sent_at}, skipping duplicate`);
     } else {
       await updateTrackingWithSendCode(match.tracking_id, sendCode, recipientName);
-
-      if (match.telegram_chat_id != null) {
-        const { sendSendCodeToTelegram } = await import('./telegramService');
-        const sent = await sendSendCodeToTelegram(
-          match.telegram_chat_id,
-          trackingNumber,
-          sendCode,
-          recipientName
-        );
-        if (sent) {
-          await markSendCodeSent(match.tracking_id);
-          console.log(`[Email Scraper] ✅ Successfully processed SEND code for ${trackingNumber} (Telegram sent)`);
-          processedSomething = true;
-        } else {
-          console.error(`[Email Scraper] Failed to send Telegram message for send code ${trackingNumber}`);
-        }
-      } else {
-        await markSendCodeSent(match.tracking_id);
-        console.log(`[Email Scraper] ✅ Stored SEND code for ${trackingNumber} (no Telegram chat linked)`);
-        processedSomething = true;
-      }
+      await markSendCodeSent(match.tracking_id);
+      console.log(`[Email Scraper] ✅ Stored SEND code for ${trackingNumber} in database (admin-only, NOT sent to Telegram)`);
+      processedSomething = true;
     }
   }
 
