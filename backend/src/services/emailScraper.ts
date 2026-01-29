@@ -556,9 +556,9 @@ async function checkImapAccount(account: ImapAccountConfig): Promise<void> {
 
         // Search for emails from InPost
         // Support multiple InPost email domains: inpost.pl, inpost.co.uk, etc.
-        // Search for unread emails OR emails from last 24 hours (to catch emails that were already read)
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
+        // Search for unread emails OR emails from last 7 days (to catch emails that were already read)
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         
         // IMAP search: unread emails from InPost OR emails from last 24 hours from InPost
         // Use separate searches and combine, or use a more flexible approach
@@ -580,12 +580,12 @@ async function checkImapAccount(account: ImapAccountConfig): Promise<void> {
             return;
           }
 
-          // If no unread emails found, also check emails from last 24 hours
+          // If no unread emails found, also check emails from last 7 days
           if (!results || results.length === 0) {
-            console.log(`[Email Scraper] No unread emails found for ${account.user}, checking last 24 hours...`);
+            console.log(`[Email Scraper] No unread emails found for ${account.user}, checking last 7 days...`);
             // IMAP OR only supports exactly 2 arguments, so nest them
             imap.search([
-              ['SINCE', yesterday],
+              ['SINCE', sevenDaysAgo],
               ['OR', 
                 ['FROM', 'inpost.pl'], 
                 ['OR', 
@@ -608,7 +608,7 @@ async function checkImapAccount(account: ImapAccountConfig): Promise<void> {
                 return;
               }
 
-              console.log(`[Email Scraper] Found ${results2.length} email(s) from last 24 hours for ${account.user}`);
+              console.log(`[Email Scraper] Found ${results2.length} email(s) from last 7 days for ${account.user}`);
               await processEmails(imap, results2, account.user);
               imap.end();
               resolve();
