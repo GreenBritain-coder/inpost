@@ -189,25 +189,29 @@ function extractSendCode(text: string): string | null {
  */
 function extractLockerId(text: string): string | null {
   // UK "ready to collect" emails: "InPost shop - Co-operative NR13 5LP Norwich"
-  const shopMatch = text.match(/inpost shop\s*-\s*([A-Za-z0-9\s\-.,]+?)(?=\s+Recipient|\s*$)/i);
+  // Pattern: "InPost shop - " followed by shop name, postcode, and city
+  const shopMatch = text.match(/inpost\s+shop\s*-\s*([A-Za-z0-9\s\-.,()]+?)(?=\s+(?:Opening|Recipient|What's|Get|PHONE|Collect by|No need)|\s*$)/i);
   if (shopMatch && shopMatch[1]?.trim()) {
     return shopMatch[1].trim();
   }
-  // "Delivered to: INPOST SHOP ..." fallback
-  const deliveredMatch = text.match(/delivered to:?\s*[^.]*?([A-Za-z0-9\s\-.,]+?)(?=\s+Recipient|\s*$)/i);
-  if (deliveredMatch && deliveredMatch[1]?.trim()) {
-    return deliveredMatch[1].trim();
+  
+  // "Delivered to: INPOST SHOP InPost shop - ..." format
+  const deliveredShopMatch = text.match(/delivered\s+to:?\s+inpost\s+shop\s+inpost\s+shop\s*-\s*([A-Za-z0-9\s\-.,()]+?)(?=\s+(?:Opening|Recipient|What's|Get)|\s*$)/i);
+  if (deliveredShopMatch && deliveredShopMatch[1]?.trim()) {
+    return deliveredShopMatch[1].trim();
   }
-  // Locker IDs (alphanumeric codes)
+  
+  // Locker IDs (alphanumeric codes like "WAR01M", "BIR123")
   const patterns = [
-    /locker[:\s]*([A-Z0-9]+)/i,
-    /paczkomat[:\s]*([A-Z0-9]+)/i,
-    /at[_\s]*locker[_\s]*([A-Z0-9]+)/i,
+    /locker[:\s]+([A-Z0-9]{5,8})/i,
+    /paczkomat[:\s]+([A-Z0-9]{5,8})/i,
+    /at[_\s]+locker[_\s]+([A-Z0-9]{5,8})/i,
   ];
   for (const pattern of patterns) {
     const m = text.match(pattern);
     if (m?.[1]) return m[1].toUpperCase();
   }
+  
   return null;
 }
 
@@ -433,6 +437,11 @@ async function processEmail(emailText: string, emailHtml: string, emailSubject: 
   // Process pickup code (collection email)
   if (pickupCode) {
     console.log(`[Email Scraper] Found PICKUP code for ${trackingNumber}: ${pickupCode}`);
+    if (lockerId) {
+      console.log(`[Email Scraper] Found pickup location for ${trackingNumber}: ${lockerId}`);
+    } else {
+      console.log(`[Email Scraper] No pickup location found for ${trackingNumber}`);
+    }
     
     if (match.pickup_code_sent_at) {
       console.log(`[Email Scraper] Pickup code already sent for ${trackingNumber} at ${match.pickup_code_sent_at}, skipping duplicate`);
