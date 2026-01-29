@@ -58,9 +58,6 @@ export default function Users() {
     }
   };
 
-  const botUsername = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'GB_Track_Bot';
-  const startLink = (uid: number) => `https://t.me/${botUsername}?start=${uid}`;
-
   if (loading) {
     return (
       <div className="users-container">
@@ -78,9 +75,9 @@ export default function Users() {
         When uploading tracking numbers via CSV, use <strong>Telegram user ID</strong> (Telegram's numeric ID, e.g., 7744334263) in the <code>user_id</code> column. 
         The system will automatically find or create users with that Telegram ID.
         <br/><br/>
-        <strong>User ID</strong> shown here is the database ID (1, 2, 3...). Share the <strong>Personal link</strong> so users can link via <strong>/start USER_ID</strong>.
+        <strong>User ID</strong> shown here is the database ID (1, 2, 3...).
         <br/><br/>
-        <strong>Telegram user ID</strong> column shows the Telegram ID that was set (either from CSV upload or manually). This allows automatic matching when users use <strong>/start</strong> without a number.
+        <strong>Telegram user ID</strong> column shows the Telegram ID that was set (either from CSV upload or manually). This allows automatic matching when users interact with the bot.
       </p>
 
       {error && (
@@ -94,7 +91,6 @@ export default function Users() {
               <th>User ID<br/><span className="users-th-subtitle">(Database ID)</span></th>
               <th>Telegram user ID<br/><span className="users-th-subtitle">(Telegram's ID)</span></th>
               <th>Telegram @username</th>
-              <th>Personal link</th>
               <th></th>
             </tr>
           </thead>
@@ -127,11 +123,6 @@ export default function Users() {
                   ) : (
                     <span>{u.telegram_username ?? '—'}</span>
                   )}
-                </td>
-                <td>
-                  <a href={startLink(u.id)} target="_blank" rel="noopener noreferrer" className="users-link">
-                    /start {u.id}
-                  </a>
                 </td>
                 <td>
                   {editingId === u.id ? (

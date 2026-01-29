@@ -312,6 +312,44 @@ async function migrate() {
       WHERE postbox_id IS NOT NULL
     `);
 
+    // Add 'cancelled' status to tracking_numbers check constraint
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        -- Drop old constraint if exists
+        IF EXISTS (
+          SELECT 1 FROM information_schema.constraint_column_usage 
+          WHERE constraint_name = 'tracking_numbers_current_status_check'
+        ) THEN
+          ALTER TABLE tracking_numbers DROP CONSTRAINT tracking_numbers_current_status_check;
+        END IF;
+        
+        -- Add new constraint with 'cancelled'
+        ALTER TABLE tracking_numbers 
+        ADD CONSTRAINT tracking_numbers_current_status_check 
+        CHECK (current_status IN ('not_scanned', 'scanned', 'delivered', 'cancelled'));
+      END $$;
+    `);
+
+    // Add 'cancelled' status to status_history check constraint
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        -- Drop old constraint if exists
+        IF EXISTS (
+          SELECT 1 FROM information_schema.constraint_column_usage 
+          WHERE constraint_name = 'status_history_status_check'
+        ) THEN
+          ALTER TABLE status_history DROP CONSTRAINT status_history_status_check;
+        END IF;
+        
+        -- Add new constraint with 'cancelled'
+        ALTER TABLE status_history 
+        ADD CONSTRAINT status_history_status_check 
+        CHECK (status IN ('not_scanned', 'scanned', 'delivered', 'cancelled'));
+      END $$;
+    `);
+
     console.log('Database migration completed successfully');
     process.exit(0);
   } catch (error) {
