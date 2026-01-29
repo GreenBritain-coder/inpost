@@ -566,7 +566,7 @@ router.post(
         // If telegram_user_id is also provided, update that user's telegram_user_id
         if (telegram_user_id) {
           const { updateUserTelegramIdentity } = await import('../models/user');
-          await updateUserTelegramIdentity(userId, null, telegram_user_id);
+          await updateUserTelegramIdentity(assign_to_user_id, null, telegram_user_id);
           console.log(`Updated user ${userId} with telegram_user_id: ${telegram_user_id}`);
         }
       } else if (telegram_user_id) {
@@ -1009,3 +1009,4 @@ router.get('/cleanup-logs', async (req: AuthRequest, res: Response) => {
 });
 
 export default router;
+
