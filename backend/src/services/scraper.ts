@@ -182,6 +182,21 @@ function parseTrackingMoreResponse(data: any, trackingNumber: string): {
         itemReceived: itemReceived || null,
         events: parsedEvents,
       };
+    } else if (statusLower.includes('cancelled') ||
+               statusLower.includes('canceled') ||
+               statusLower.includes('cancelled by sender') ||
+               statusLower.includes('canceled by sender') ||
+               statusLower.includes('cancelled by recipient') ||
+               statusLower.includes('canceled by recipient')) {
+      console.log(`[${trackingNumber}] TrackingMore: Detected CANCELLED status`);
+      return {
+        status: 'cancelled',
+        details,
+        statusHeader: statusHeader || 'Cancelled',
+        trackingmoreStatus,
+        itemReceived: itemReceived || null,
+        events: parsedEvents,
+      };
     } else if (statusLower === 'transit' ||
                statusLower === 'pickup' ||
                statusLower === 'inforeceived' ||

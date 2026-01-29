@@ -1,6 +1,6 @@
 import { pool } from '../db/connection';
 
-export type TrackingStatus = 'not_scanned' | 'scanned' | 'delivered';
+export type TrackingStatus = 'not_scanned' | 'scanned' | 'delivered' | 'cancelled';
 
 export interface TrackingEvent {
   id: number;
@@ -86,6 +86,7 @@ export async function getAllTrackingNumbers(
     not_scanned: number;
     scanned: number;
     delivered: number;
+    cancelled: number;
     total: number;
   };
 }> {
@@ -138,6 +139,7 @@ export async function getAllTrackingNumbers(
     not_scanned: 0,
     scanned: 0,
     delivered: 0,
+    cancelled: 0,
     total: 0
   };
 
@@ -148,7 +150,8 @@ export async function getAllTrackingNumbers(
         COUNT(*) as total,
         COUNT(CASE WHEN t.current_status = 'not_scanned' THEN 1 END) as not_scanned,
         COUNT(CASE WHEN t.current_status = 'scanned' THEN 1 END) as scanned,
-        COUNT(CASE WHEN t.current_status = 'delivered' THEN 1 END) as delivered
+        COUNT(CASE WHEN t.current_status = 'delivered' THEN 1 END) as delivered,
+        COUNT(CASE WHEN t.current_status = 'cancelled' THEN 1 END) as cancelled
       FROM tracking_numbers t
       ${whereClause}
     `, queryParams);
@@ -156,6 +159,7 @@ export async function getAllTrackingNumbers(
       not_scanned: parseInt(statsResult.rows[0].not_scanned),
       scanned: parseInt(statsResult.rows[0].scanned),
       delivered: parseInt(statsResult.rows[0].delivered),
+      cancelled: parseInt(statsResult.rows[0].cancelled),
       total: parseInt(statsResult.rows[0].total)
     };
   } else {
@@ -165,13 +169,15 @@ export async function getAllTrackingNumbers(
         COUNT(*) as total,
         COUNT(CASE WHEN current_status = 'not_scanned' THEN 1 END) as not_scanned,
         COUNT(CASE WHEN current_status = 'scanned' THEN 1 END) as scanned,
-        COUNT(CASE WHEN current_status = 'delivered' THEN 1 END) as delivered
+        COUNT(CASE WHEN current_status = 'delivered' THEN 1 END) as delivered,
+        COUNT(CASE WHEN current_status = 'cancelled' THEN 1 END) as cancelled
       FROM tracking_numbers
     `);
     stats = {
       not_scanned: parseInt(countResult.rows[0].not_scanned),
       scanned: parseInt(countResult.rows[0].scanned),
       delivered: parseInt(countResult.rows[0].delivered),
+      cancelled: parseInt(countResult.rows[0].cancelled),
       total: parseInt(countResult.rows[0].total)
     };
   }
@@ -221,6 +227,7 @@ export async function getTrackingNumbersByBox(
     not_scanned: number;
     scanned: number;
     delivered: number;
+    cancelled: number;
     total: number;
   };
 }> {
@@ -263,7 +270,8 @@ export async function getTrackingNumbersByBox(
       COUNT(*) as total,
       COUNT(CASE WHEN current_status = 'not_scanned' THEN 1 END) as not_scanned,
       COUNT(CASE WHEN current_status = 'scanned' THEN 1 END) as scanned,
-      COUNT(CASE WHEN current_status = 'delivered' THEN 1 END) as delivered
+      COUNT(CASE WHEN current_status = 'delivered' THEN 1 END) as delivered,
+      COUNT(CASE WHEN current_status = 'cancelled' THEN 1 END) as cancelled
     FROM tracking_numbers
     WHERE box_id = $1
   `, [boxId]);
@@ -272,6 +280,7 @@ export async function getTrackingNumbersByBox(
     not_scanned: parseInt(countResult.rows[0].not_scanned),
     scanned: parseInt(countResult.rows[0].scanned),
     delivered: parseInt(countResult.rows[0].delivered),
+    cancelled: parseInt(countResult.rows[0].cancelled),
     total
   };
 

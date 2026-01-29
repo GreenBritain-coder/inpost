@@ -15,7 +15,7 @@ export interface TrackingNumber {
   id: number;
   tracking_number: string;
   box_id: number | null;
-  current_status: 'not_scanned' | 'scanned' | 'delivered';
+  current_status: 'not_scanned' | 'scanned' | 'delivered' | 'cancelled';
   status_details?: string | null;
   custom_timestamp?: string | null;
   is_manual_status: boolean;
@@ -46,7 +46,7 @@ export interface ScannedChangeLog {
   box_color_state: 'red' | 'yellow' | 'green';
   changed_at: string;
   status_details: string | null;
-  current_status: 'not_scanned' | 'scanned' | 'delivered';
+  current_status: 'not_scanned' | 'scanned' | 'delivered' | 'cancelled';
 }
 
 export interface TrackingEvent {
@@ -93,7 +93,7 @@ export const api = {
   deleteBox: (id: number) => axios.delete(`${API_URL}/tracking/boxes/${id}`),
 
   // Tracking Numbers
-  getTrackingNumbers: (boxId?: number, page?: number, limit?: number, status?: 'not_scanned' | 'scanned' | 'delivered', customTimestamp?: string, search?: string, unassignedOnly?: boolean, kingBoxId?: number | null) => {
+  getTrackingNumbers: (boxId?: number, page?: number, limit?: number, status?: 'not_scanned' | 'scanned' | 'delivered' | 'cancelled', customTimestamp?: string, search?: string, unassignedOnly?: boolean, kingBoxId?: number | null) => {
     const params: any = {};
     if (boxId) params.boxId = boxId;
     if (page) params.page = page;
@@ -112,6 +112,7 @@ export const api = {
         not_scanned: number;
         scanned: number;
         delivered: number;
+        cancelled: number;
         total: number;
       };
     }>(`${API_URL}/tracking/numbers`, { params });
@@ -144,7 +145,7 @@ export const api = {
     axios.delete(`${API_URL}/tracking/numbers`),
   updateTrackingStatus: (
     id: number, 
-    status: 'not_scanned' | 'scanned' | 'delivered',
+    status: 'not_scanned' | 'scanned' | 'delivered' | 'cancelled',
     customTimestamp?: string | null
   ) =>
     axios.patch<TrackingNumber>(`${API_URL}/tracking/numbers/${id}/status`, { 
@@ -182,7 +183,7 @@ export const api = {
   getStatusChangeLogs: (
     limit?: number,
     changeType?: 'status_change' | 'details_update',
-    status?: 'not_scanned' | 'scanned' | 'delivered',
+    status?: 'not_scanned' | 'scanned' | 'delivered' | 'cancelled',
     boxId?: number,
     trackingNumber?: string
   ) => {
@@ -254,7 +255,7 @@ export interface CleanupLog {
 export interface FirstScanLog {
   id: number;
   tracking_number: string;
-  current_status: 'not_scanned' | 'scanned' | 'delivered';
+  current_status: 'not_scanned' | 'scanned' | 'delivered' | 'cancelled';
   first_scanned_at: string;
   created_at: string;
   box_name: string | null;
@@ -262,8 +263,8 @@ export interface FirstScanLog {
 }
 
 export interface DateBasedStats {
-  today: { not_scanned: number; scanned: number; delivered: number; total: number };
-  yesterday: { not_scanned: number; scanned: number; delivered: number; total: number };
-  twoDaysAgo: { not_scanned: number; scanned: number; delivered: number; total: number };
-  threeDaysAgo: { not_scanned: number; scanned: number; delivered: number; total: number };
+  today: { not_scanned: number; scanned: number; delivered: number; cancelled: number; total: number };
+  yesterday: { not_scanned: number; scanned: number; delivered: number; cancelled: number; total: number };
+  twoDaysAgo: { not_scanned: number; scanned: number; delivered: number; cancelled: number; total: number };
+  threeDaysAgo: { not_scanned: number; scanned: number; delivered: number; cancelled: number; total: number };
 }

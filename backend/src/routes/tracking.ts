@@ -503,7 +503,7 @@ router.get('/numbers', async (req: AuthRequest, res: Response) => {
     const boxId = req.query.boxId ? parseInt(req.query.boxId as string) : undefined;
     const page = req.query.page ? parseInt(req.query.page as string) : 1;
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
-    const status = req.query.status as 'not_scanned' | 'scanned' | 'delivered' | undefined;
+    const status = req.query.status as 'not_scanned' | 'scanned' | 'delivered' | 'cancelled' | undefined;
     const customTimestamp = req.query.customTimestamp as string | undefined;
     const search = req.query.search as string | undefined;
     const trackingNumberSearch = req.query.trackingNumber as string | undefined;
@@ -511,7 +511,7 @@ router.get('/numbers', async (req: AuthRequest, res: Response) => {
     const kingBoxId = req.query.kingBoxId ? parseInt(req.query.kingBoxId as string) : undefined;
     
     // Validate status if provided
-    if (status && !['not_scanned', 'scanned', 'delivered'].includes(status)) {
+    if (status && !['not_scanned', 'scanned', 'delivered', 'cancelled'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status filter' });
     }
     
@@ -1074,7 +1074,7 @@ router.post('/check-emails', async (req: AuthRequest, res: Response) => {
 router.patch(
   '/numbers/:id/status',
   [
-    body('status').isIn(['not_scanned', 'scanned', 'delivered']),
+    body('status').isIn(['not_scanned', 'scanned', 'delivered', 'cancelled']),
     body('custom_timestamp').optional({ nullable: true, checkFalsy: true }).isISO8601().toDate(),
   ],
   async (req: AuthRequest, res: Response) => {
@@ -1236,7 +1236,7 @@ router.get('/logs/status-changes', async (req: AuthRequest, res: Response) => {
   try {
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
     const changeType = req.query.changeType as 'status_change' | 'details_update' | undefined;
-    const status = req.query.status as 'not_scanned' | 'scanned' | 'delivered' | undefined;
+    const status = req.query.status as 'not_scanned' | 'scanned' | 'delivered' | 'cancelled' | undefined;
     const boxId = req.query.boxId ? parseInt(req.query.boxId as string) : undefined;
     const trackingNumber = req.query.trackingNumber as string | undefined;
     
@@ -1278,10 +1278,10 @@ router.get('/logs/first-scans', async (req: AuthRequest, res: Response) => {
 
     // Initialize default structure
     const stats = {
-      today: { not_scanned: 0, scanned: 0, delivered: 0, total: 0 },
-      yesterday: { not_scanned: 0, scanned: 0, delivered: 0, total: 0 },
-      twoDaysAgo: { not_scanned: 0, scanned: 0, delivered: 0, total: 0 },
-      threeDaysAgo: { not_scanned: 0, scanned: 0, delivered: 0, total: 0 }
+      today: { not_scanned: 0, scanned: 0, delivered: 0, cancelled: 0, total: 0 },
+      yesterday: { not_scanned: 0, scanned: 0, delivered: 0, cancelled: 0, total: 0 },
+      twoDaysAgo: { not_scanned: 0, scanned: 0, delivered: 0, cancelled: 0, total: 0 },
+      threeDaysAgo: { not_scanned: 0, scanned: 0, delivered: 0, cancelled: 0, total: 0 }
     };
 
     // Get date strings in YYYY-MM-DD format for comparison
@@ -1316,7 +1316,7 @@ router.get('/logs/first-scans', async (req: AuthRequest, res: Response) => {
       }
 
       if (target) {
-        const status = row.current_status as 'not_scanned' | 'scanned' | 'delivered';
+        const status = row.current_status as 'not_scanned' | 'scanned' | 'delivered' | 'cancelled';
         const count = parseInt(row.count);
         stats[target][status] = count;
         stats[target].total += count;

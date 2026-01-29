@@ -6,18 +6,21 @@ const STATUS_COLORS = {
   not_scanned: '#e74c3c',
   scanned: '#f39c12',
   delivered: '#27ae60',
+  cancelled: '#95a5a6',
 };
 
 const STATUS_EMOJIS = {
   not_scanned: '🔴',
   scanned: '🟡',
   delivered: '🟢',
+  cancelled: '⚫',
 };
 
 const STATUS_LABELS = {
   not_scanned: 'Not Collected',
   scanned: 'In Transit',
   delivered: 'Ready for Pickup',
+  cancelled: 'Cancelled',
 };
 
 export default function Dashboard() {
@@ -26,7 +29,7 @@ export default function Dashboard() {
   const [kingBoxes, setKingBoxes] = useState<Box[]>([]);
   const [selectedKingBox, setSelectedKingBox] = useState<number | null>(null);
   const [selectedBox, setSelectedBox] = useState<number | null | -1>(null);
-  const [selectedStatus, setSelectedStatus] = useState<'not_scanned' | 'scanned' | 'delivered' | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<'not_scanned' | 'scanned' | 'delivered' | 'cancelled' | null>(null);
   const [selectedCustomTimestamp, setSelectedCustomTimestamp] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -41,6 +44,7 @@ export default function Dashboard() {
     not_scanned: 0,
     scanned: 0,
     delivered: 0,
+    cancelled: 0,
     total: 0
   });
   const [selectedTrackingId, setSelectedTrackingId] = useState<number | null>(null);
@@ -387,7 +391,7 @@ export default function Dashboard() {
             value={selectedStatus || ''}
             onChange={(e) => {
               const value = e.target.value;
-              setSelectedStatus(value ? value as 'not_scanned' | 'scanned' | 'delivered' : null);
+              setSelectedStatus(value ? value as 'not_scanned' | 'scanned' | 'delivered' | 'cancelled' : null);
               setCurrentPage(1); // Reset to first page when filter changes
             }}
             aria-label="Filter by Status"
@@ -396,6 +400,7 @@ export default function Dashboard() {
             <option value="not_scanned">🔴 Not Collected ({stats.not_scanned})</option>
             <option value="scanned">🟡 In Transit ({stats.scanned})</option>
             <option value="delivered">🟢 Ready for Pickup ({stats.delivered})</option>
+            <option value="cancelled">⚫ Cancelled ({stats.cancelled})</option>
           </select>
         </label>
         <label>
@@ -450,6 +455,13 @@ export default function Dashboard() {
             {stats.delivered}
           </div>
           <div className="stat-label">Ready for Pickup</div>
+        </div>
+        <div className="stat-card" style={{ borderColor: STATUS_COLORS.cancelled }}>
+          <div className="stat-emoji">{STATUS_EMOJIS.cancelled}</div>
+          <div className="stat-value">
+            {stats.cancelled}
+          </div>
+          <div className="stat-label">Cancelled</div>
         </div>
         <div className="stat-card">
           <div className="stat-value">{stats.total}</div>
@@ -866,7 +878,7 @@ export default function Dashboard() {
                     <select
                       value={tn.current_status}
                       onChange={(e) => {
-                        const newStatus = e.target.value as 'not_scanned' | 'scanned' | 'delivered';
+                        const newStatus = e.target.value as 'not_scanned' | 'scanned' | 'delivered' | 'cancelled';
                         if (editingTrackingId === tn.id && customTimestamp) {
                           const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
                           handleStatusChange(tn.id, newStatus, dateTimestamp);
@@ -881,6 +893,7 @@ export default function Dashboard() {
                       <option value="not_scanned">🔴 Not Collected</option>
                       <option value="scanned">🟡 In Transit</option>
                       <option value="delivered">🟢 Ready for Pickup</option>
+                      <option value="cancelled">⚫ Cancelled</option>
                     </select>
                     <button
                       onClick={() => handleRefreshSingle(tn.id)}

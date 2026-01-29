@@ -11,7 +11,7 @@ export default function Logs() {
   const [error, setError] = useState<string | null>(null);
   const [limit, setLimit] = useState(100);
   const [changeTypeFilter, setChangeTypeFilter] = useState<'all' | 'status_change' | 'details_update'>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'not_scanned' | 'scanned' | 'delivered'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'not_scanned' | 'scanned' | 'delivered' | 'cancelled'>('all');
   const [boxFilter, setBoxFilter] = useState<number | null>(null);
   const [trackingNumberSearch, setTrackingNumberSearch] = useState<string>('');
   const [isConnected, setIsConnected] = useState(false);
@@ -334,12 +334,13 @@ export default function Logs() {
             <span>Status:</span>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as 'all' | 'not_scanned' | 'scanned' | 'delivered')}
+              onChange={(e) => setStatusFilter(e.target.value as 'all' | 'not_scanned' | 'scanned' | 'delivered' | 'cancelled')}
             >
               <option value="all">All Statuses</option>
               <option value="not_scanned">🔴 Not Collected</option>
               <option value="scanned">🟡 In Transit</option>
               <option value="delivered">🟢 Ready for Pickup</option>
+              <option value="cancelled">⚫ Cancelled</option>
             </select>
           </label>
         </div>

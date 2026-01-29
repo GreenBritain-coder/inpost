@@ -115,6 +115,17 @@ function mapDeliveryStatus(deliveryStatus: string | null | undefined, trackingDa
       statusLower.includes('delivered to recipient')) {
     return 'delivered';
   } 
+  // Map to cancelled status
+  else if (
+    statusLower.includes('cancelled') ||
+    statusLower.includes('canceled') ||
+    statusLower.includes('cancelled by sender') ||
+    statusLower.includes('canceled by sender') ||
+    statusLower.includes('cancelled by recipient') ||
+    statusLower.includes('canceled by recipient')
+  ) {
+    return 'cancelled';
+  }
   // Map to scanned status - comprehensive list matching scraper.ts
   else if (
     statusLower === 'transit' ||
