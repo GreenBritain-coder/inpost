@@ -52,6 +52,13 @@ export async function updateAllTrackingStatuses() {
         
         const result = await checkInPostStatus(tn.tracking_number);
         
+        // Always save tracking events if available (even when status unchanged)
+        // This ensures event history gets populated for "pending" parcels
+        if (result.events && result.events.length > 0) {
+          await saveTrackingEvents(tn.id, result.events);
+          console.log(`Saved ${result.events.length} events for ${tn.tracking_number}`);
+        }
+        
         // Update if status changed OR if status_details is missing/empty but we have a statusHeader
         // OR if trackingmore_status changed
         const statusChanged = result.status !== tn.current_status;
@@ -63,12 +70,6 @@ export async function updateAllTrackingStatuses() {
           // Store the statusHeader (like "We've got it") in the status_details field
           // isManual=false for automatic updates
           await updateTrackingStatus(tn.id, result.status, result.statusHeader, undefined, false, result.trackingmoreStatus, result.itemReceived);
-          
-          // Save tracking events if available
-          if (result.events && result.events.length > 0) {
-            await saveTrackingEvents(tn.id, result.events);
-            console.log(`Saved ${result.events.length} events for ${tn.tracking_number}`);
-          }
           
           updated++;
           if (statusChanged) {

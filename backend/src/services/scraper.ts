@@ -5,6 +5,19 @@ const TRACKINGMORE_API_KEY = process.env.TRACKINGMORE_API_KEY || '';
 const TRACKINGMORE_API_BASE = 'https://api.trackingmore.com/v4';
 
 /**
+ * Pick TrackingMore courier code by tracking number format.
+ * UK numbers (JJD..., MD...) use InPost UK; others use InPost Poland (Paczkomaty).
+ */
+function getCourierCodeForTrackingNumber(trackingNumber: string): string {
+  const clean = trackingNumber.replace(/\s+/g, '').toUpperCase();
+  // InPost UK formats: JJD (to recipient), MD (sender receipt) - 15–18 chars
+  if (clean.startsWith('JJD') || clean.startsWith('MD')) {
+    return 'inpost-uk';
+  }
+  return 'inpost-paczkomaty';
+}
+
+/**
  * Parse TrackingMore API response
  */
 function parseTrackingMoreResponse(data: any, trackingNumber: string): {
@@ -269,8 +282,8 @@ export async function checkInPostStatus(trackingNumber: string): Promise<{
     
     try {
       // Step 1: Create tracking in TrackingMore (if not already exists)
-      // Use 'inpost-paczkomaty' as the courier code for InPost lockers (TrackingMore v4 format)
-      const courierCode = 'inpost-paczkomaty';
+      // Use InPost UK for JJD/MD (UK), InPost Poland (Paczkomaty) for others
+      const courierCode = getCourierCodeForTrackingNumber(cleanTrackingNumber);
       let trackingCreated = false;
       
       try {
