@@ -12,29 +12,6 @@ async function migrate() {
       )
     `);
 
-    // Add telegram_chat_id to users so we can send them pickup codes
-    await pool.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='telegram_chat_id') THEN
-          ALTER TABLE users ADD COLUMN telegram_chat_id BIGINT;
-        END IF;
-      END $$;
-    `);
-
-    // Telegram identity for automatic linking when user sends /start (no link needed)
-    await pool.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='telegram_user_id') THEN
-          ALTER TABLE users ADD COLUMN telegram_user_id BIGINT;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='telegram_username') THEN
-          ALTER TABLE users ADD COLUMN telegram_username VARCHAR(255);
-        END IF;
-      END $$;
-    `);
-
     // Create boxes table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS boxes (
@@ -240,6 +217,48 @@ async function migrate() {
       )
     `);
 
+    // Create indexes
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_tracking_numbers_box_id ON tracking_numbers(box_id);
+      CREATE INDEX IF NOT EXISTS idx_tracking_numbers_postbox_id ON tracking_numbers(postbox_id);
+      CREATE INDEX IF NOT EXISTS idx_tracking_numbers_status ON tracking_numbers(current_status);
+      CREATE INDEX IF NOT EXISTS idx_status_history_tracking_id ON status_history(tracking_number_id);
+      CREATE INDEX IF NOT EXISTS idx_status_history_timestamp ON status_history(timestamp);
+      CREATE INDEX IF NOT EXISTS idx_tracking_events_tracking_id ON tracking_events(tracking_number_id);
+      CREATE INDEX IF NOT EXISTS idx_tracking_events_date ON tracking_events(event_date);
+      CREATE INDEX IF NOT EXISTS idx_cleanup_logs_created_at ON cleanup_logs(created_at);
+    `);
+
+    // Nullify postbox_id in tracking_numbers (migrate away from postboxes)
+    await pool.query(`
+      UPDATE tracking_numbers 
+      SET postbox_id = NULL 
+      WHERE postbox_id IS NOT NULL
+    `);
+
+    // Add telegram_chat_id to users so we can send them pickup codes
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='telegram_chat_id') THEN
+          ALTER TABLE users ADD COLUMN telegram_chat_id BIGINT;
+        END IF;
+      END $$;
+    `);
+
+    // Telegram identity for automatic linking when user sends /start (no link needed)
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='telegram_user_id') THEN
+          ALTER TABLE users ADD COLUMN telegram_user_id BIGINT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='telegram_username') THEN
+          ALTER TABLE users ADD COLUMN telegram_username VARCHAR(255);
+        END IF;
+      END $$;
+    `);
+
     // Add email/telegram integration fields (if not exist)
     await pool.query(`
       DO $$ 
@@ -293,33 +312,17 @@ async function migrate() {
       CREATE INDEX IF NOT EXISTS idx_tracking_number_email ON tracking_numbers(tracking_number) WHERE email_used IS NOT NULL;
     `);
 
-    // Create indexes
-    await pool.query(`
-      CREATE INDEX IF NOT EXISTS idx_tracking_numbers_box_id ON tracking_numbers(box_id);
-      CREATE INDEX IF NOT EXISTS idx_tracking_numbers_postbox_id ON tracking_numbers(postbox_id);
-      CREATE INDEX IF NOT EXISTS idx_tracking_numbers_status ON tracking_numbers(current_status);
-      CREATE INDEX IF NOT EXISTS idx_status_history_tracking_id ON status_history(tracking_number_id);
-      CREATE INDEX IF NOT EXISTS idx_status_history_timestamp ON status_history(timestamp);
-      CREATE INDEX IF NOT EXISTS idx_tracking_events_tracking_id ON tracking_events(tracking_number_id);
-      CREATE INDEX IF NOT EXISTS idx_tracking_events_date ON tracking_events(event_date);
-      CREATE INDEX IF NOT EXISTS idx_cleanup_logs_created_at ON cleanup_logs(created_at);
-    `);
-
-    // Nullify postbox_id in tracking_numbers (migrate away from postboxes)
-    await pool.query(`
-      UPDATE tracking_numbers 
-      SET postbox_id = NULL 
-      WHERE postbox_id IS NOT NULL
-    `);
-
     // Add 'cancelled' status to tracking_numbers check constraint
+    // Using table_constraints (not constraint_column_usage) for proper constraint checking
     await pool.query(`
       DO $$ 
       BEGIN
         -- Drop old constraint if exists
         IF EXISTS (
-          SELECT 1 FROM information_schema.constraint_column_usage 
+          SELECT 1 FROM information_schema.table_constraints 
           WHERE constraint_name = 'tracking_numbers_current_status_check'
+            AND table_name = 'tracking_numbers'
+            AND table_schema = 'public'
         ) THEN
           ALTER TABLE tracking_numbers DROP CONSTRAINT tracking_numbers_current_status_check;
         END IF;
@@ -332,13 +335,16 @@ async function migrate() {
     `);
 
     // Add 'cancelled' status to status_history check constraint
+    // Using table_constraints (not constraint_column_usage) for proper constraint checking
     await pool.query(`
       DO $$ 
       BEGIN
         -- Drop old constraint if exists
         IF EXISTS (
-          SELECT 1 FROM information_schema.constraint_column_usage 
+          SELECT 1 FROM information_schema.table_constraints 
           WHERE constraint_name = 'status_history_status_check'
+            AND table_name = 'status_history'
+            AND table_schema = 'public'
         ) THEN
           ALTER TABLE status_history DROP CONSTRAINT status_history_status_check;
         END IF;
@@ -359,4 +365,3 @@ async function migrate() {
 }
 
 migrate();
-
