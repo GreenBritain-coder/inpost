@@ -2,22 +2,27 @@ import { useEffect, useState } from 'react';
 import { api, TrackingNumber, Box, TrackingEvent } from '../api/api';
 import './Dashboard.css';
 
-const STATUS_COLORS = {
+type TrackingStatus = 'not_scanned' | 'scanned' | 'delivered' | 'cancelled';
+
+const STATUS_COLORS: Record<TrackingStatus, string> = {
   not_scanned: '#e74c3c',
   scanned: '#f39c12',
   delivered: '#27ae60',
+  cancelled: '#95a5a6',
 };
 
-const STATUS_EMOJIS = {
+const STATUS_EMOJIS: Record<TrackingStatus, string> = {
   not_scanned: '🔴',
   scanned: '🟡',
   delivered: '🟢',
+  cancelled: '⚫',
 };
 
-const STATUS_LABELS = {
+const STATUS_LABELS: Record<TrackingStatus, string> = {
   not_scanned: 'Not Scanned',
   scanned: 'Scanned by InPost',
   delivered: 'Delivered',
+  cancelled: 'Cancelled',
 };
 
 export default function Dashboard() {
@@ -26,7 +31,7 @@ export default function Dashboard() {
   const [kingBoxes, setKingBoxes] = useState<Box[]>([]);
   const [selectedKingBox, setSelectedKingBox] = useState<number | null>(null);
   const [selectedBox, setSelectedBox] = useState<number | null | -1>(null);
-  const [selectedStatus, setSelectedStatus] = useState<'not_scanned' | 'scanned' | 'delivered' | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<'not_scanned' | 'scanned' | 'delivered' | 'cancelled' | null>(null);
   const [selectedCustomTimestamp, setSelectedCustomTimestamp] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -41,6 +46,7 @@ export default function Dashboard() {
     not_scanned: 0,
     scanned: 0,
     delivered: 0,
+    cancelled: 0,
     total: 0
   });
   const [selectedTrackingId, setSelectedTrackingId] = useState<number | null>(null);
@@ -229,7 +235,7 @@ export default function Dashboard() {
 
   const handleStatusChange = async (
     id: number, 
-    newStatus: 'not_scanned' | 'scanned' | 'delivered',
+    newStatus: TrackingStatus,
     timestamp?: string | null
   ) => {
     try {
@@ -365,7 +371,7 @@ export default function Dashboard() {
             value={selectedStatus || ''}
             onChange={(e) => {
               const value = e.target.value;
-              setSelectedStatus(value ? value as 'not_scanned' | 'scanned' | 'delivered' : null);
+              setSelectedStatus(value ? (value as TrackingStatus) : null);
               setCurrentPage(1); // Reset to first page when filter changes
             }}
             aria-label="Filter by Status"
@@ -374,6 +380,7 @@ export default function Dashboard() {
             <option value="not_scanned">🔴 Not Scanned ({stats.not_scanned})</option>
             <option value="scanned">🟡 Scanned ({stats.scanned})</option>
             <option value="delivered">🟢 Delivered ({stats.delivered})</option>
+            <option value="cancelled">⚫ Cancelled ({stats.cancelled})</option>
           </select>
         </label>
         <label>
@@ -428,6 +435,13 @@ export default function Dashboard() {
             {stats.delivered}
           </div>
           <div className="stat-label">Delivered</div>
+        </div>
+        <div className="stat-card" style={{ borderColor: STATUS_COLORS.cancelled }}>
+          <div className="stat-emoji">{STATUS_EMOJIS.cancelled}</div>
+          <div className="stat-value">
+            {stats.cancelled}
+          </div>
+          <div className="stat-label">Cancelled</div>
         </div>
         <div className="stat-card">
           <div className="stat-value">{stats.total}</div>
@@ -657,7 +671,7 @@ export default function Dashboard() {
                       <select
                         value={tn.current_status}
                         onChange={(e) => {
-                          const newStatus = e.target.value as 'not_scanned' | 'scanned' | 'delivered';
+                          const newStatus = e.target.value as TrackingStatus;
                           if (editingTrackingId === tn.id && customTimestamp) {
                             // Convert date to ISO timestamp (midnight UTC)
                             const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
@@ -672,6 +686,7 @@ export default function Dashboard() {
                         <option value="not_scanned">🔴 Not Scanned</option>
                         <option value="scanned">🟡 Scanned</option>
                         <option value="delivered">🟢 Delivered</option>
+                        <option value="cancelled">⚫ Cancelled</option>
                       </select>
                       <button
                         onClick={() => handleRefreshSingle(tn.id)}
@@ -826,7 +841,7 @@ export default function Dashboard() {
                     <select
                       value={tn.current_status}
                       onChange={(e) => {
-                        const newStatus = e.target.value as 'not_scanned' | 'scanned' | 'delivered' | 'cancelled';
+                        const newStatus = e.target.value as TrackingStatus;
                         if (editingTrackingId === tn.id && customTimestamp) {
                           const dateTimestamp = customTimestamp ? new Date(customTimestamp + 'T00:00:00Z').toISOString() : null;
                           handleStatusChange(tn.id, newStatus, dateTimestamp);
@@ -841,6 +856,7 @@ export default function Dashboard() {
                       <option value="not_scanned">🔴 Not Scanned</option>
                       <option value="scanned">🟡 Scanned</option>
                       <option value="delivered">🟢 Delivered</option>
+                      <option value="cancelled">⚫ Cancelled</option>
                     </select>
                     <button
                       onClick={() => handleRefreshSingle(tn.id)}
