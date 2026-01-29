@@ -73,11 +73,7 @@ export default function Users() {
       </div>
       <p className="users-intro">
         When uploading tracking numbers via CSV, use <strong>Telegram user ID</strong> (Telegram's numeric ID, e.g., 7744334263) in the <code>user_id</code> column. 
-        The system will automatically find or create users with that Telegram ID.
-        <br/><br/>
-        <strong>User ID</strong> shown here is the database ID (1, 2, 3...).
-        <br/><br/>
-        <strong>Telegram user ID</strong> column shows the Telegram ID that was set (either from CSV upload or manually). This allows automatic matching when users interact with the bot.
+        The system will automatically find or create users with that Telegram ID, allowing automatic matching when users interact with the bot.
       </p>
 
       {error && (
@@ -88,8 +84,7 @@ export default function Users() {
         <table className="users-table">
           <thead>
             <tr>
-              <th>User ID<br/><span className="users-th-subtitle">(Database ID)</span></th>
-              <th>Telegram user ID<br/><span className="users-th-subtitle">(Telegram's ID)</span></th>
+              <th>Telegram user ID<br/><span className="users-th-subtitle">(Telegram's numeric ID)</span></th>
               <th>Telegram @username</th>
               <th></th>
             </tr>
@@ -97,7 +92,6 @@ export default function Users() {
           <tbody>
             {users.map((u) => (
               <tr key={u.id}>
-                <td><strong>{u.id}</strong></td>
                 <td>
                   {editingId === u.id ? (
                     <input
