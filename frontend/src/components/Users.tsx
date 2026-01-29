@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, UserSummary } from '../api/api';
+import { api, UserSummary, TrackingNumber } from '../api/api';
 import './Users.css';
 
 export default function Users() {
@@ -10,6 +10,9 @@ export default function Users() {
   const [telegramUserId, setTelegramUserId] = useState('');
   const [telegramUsername, setTelegramUsername] = useState('');
   const [saving, setSaving] = useState(false);
+  const [trackingsModalUser, setTrackingsModalUser] = useState<UserSummary | null>(null);
+  const [trackingsModalList, setTrackingsModalList] = useState<TrackingNumber[]>([]);
+  const [trackingsModalLoading, setTrackingsModalLoading] = useState(false);
 
   useEffect(() => {
     loadUsers();
@@ -58,6 +61,25 @@ export default function Users() {
     }
   };
 
+  const openTrackingsModal = async (u: UserSummary) => {
+    setTrackingsModalUser(u);
+    setTrackingsModalList([]);
+    setTrackingsModalLoading(true);
+    try {
+      const res = await api.getTrackingNumbers(undefined, 1, 500, undefined, undefined, undefined, undefined, undefined, u.id);
+      setTrackingsModalList(res.data.data);
+    } catch {
+      setTrackingsModalList([]);
+    } finally {
+      setTrackingsModalLoading(false);
+    }
+  };
+
+  const closeTrackingsModal = () => {
+    setTrackingsModalUser(null);
+    setTrackingsModalList([]);
+  };
+
   if (loading) {
     return (
       <div className="users-container">
@@ -86,6 +108,7 @@ export default function Users() {
             <tr>
               <th>Telegram user ID<br/><span className="users-th-subtitle">(Telegram's numeric ID)</span></th>
               <th>Telegram @username</th>
+              <th></th>
               <th></th>
             </tr>
           </thead>
@@ -134,11 +157,52 @@ export default function Users() {
                     </button>
                   )}
                 </td>
+                <td>
+                  {editingId !== u.id && (
+                    <button type="button" onClick={() => openTrackingsModal(u)} className="users-btn users-btn-trackings" title="View linked tracking numbers">
+                      View trackings
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {trackingsModalUser && (
+        <div className="users-modal-overlay" onClick={closeTrackingsModal} role="presentation">
+          <div className="users-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="users-modal-header">
+              <h3>Trackings linked to user</h3>
+              <p className="users-modal-subtitle">
+                User ID {trackingsModalUser.id}
+                {trackingsModalUser.telegram_user_id && ` · Telegram ${trackingsModalUser.telegram_user_id}`}
+                {trackingsModalUser.telegram_username && ` · @${trackingsModalUser.telegram_username.replace(/^@/, '')}`}
+              </p>
+              <button type="button" onClick={closeTrackingsModal} className="users-modal-close" aria-label="Close">
+                ×
+              </button>
+            </div>
+            <div className="users-modal-body">
+              {trackingsModalLoading ? (
+                <p>Loading trackings…</p>
+              ) : trackingsModalList.length === 0 ? (
+                <p className="users-modal-empty">No tracking numbers linked to this user.</p>
+              ) : (
+                <ul className="users-modal-trackings-list">
+                  {trackingsModalList.map((t) => (
+                    <li key={t.id} className="users-modal-tracking-item">
+                      <span className="users-modal-tracking-number">{t.tracking_number}</span>
+                      <span className={`users-modal-tracking-status status-${t.current_status}`}>{t.current_status}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

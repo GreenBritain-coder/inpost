@@ -11,6 +11,8 @@ export default function AddTracking() {
   const [newBoxParentId, setNewBoxParentId] = useState<number | null>(null);
   const [showNewBox, setShowNewBox] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState('');
+  const [telegramUserId, setTelegramUserId] = useState('');
+  const [emailUsed, setEmailUsed] = useState('');
   const [bulkTrackingNumbers, setBulkTrackingNumbers] = useState('');
   const [bulkCustomTimestamp, setBulkCustomTimestamp] = useState('');
   const [mode, setMode] = useState<'single' | 'bulk'>('single');
@@ -125,13 +127,21 @@ export default function AddTracking() {
   const handleSingleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!trackingNumber.trim()) return;
+    if (!telegramUserId.trim()) return;
 
     setLoading(true);
     setMessage(null);
 
     try {
-      await api.createTrackingNumber(trackingNumber.trim(), selectedBox || undefined);
+      await api.createTrackingNumber(
+        trackingNumber.trim(),
+        selectedBox || undefined,
+        telegramUserId.trim() || undefined,
+        emailUsed.trim() || undefined
+      );
       setTrackingNumber('');
+      setTelegramUserId('');
+      setEmailUsed('');
       setMessage({ type: 'success', text: 'Tracking number added successfully' });
     } catch (error: any) {
       setMessage({
@@ -393,7 +403,7 @@ export default function AddTracking() {
       {mode === 'single' ? (
         <form onSubmit={handleSingleSubmit} className="tracking-form">
           <div className="form-group">
-            <label htmlFor="tracking-number">Tracking Number *</label>
+            <label htmlFor="tracking-number">Tracking Number</label>
             <input
               type="text"
               id="tracking-number"
@@ -402,29 +412,6 @@ export default function AddTracking() {
               placeholder="Enter tracking number"
               required
             />
-          </div>
-          <div className="form-group">
-            <label htmlFor="telegram-user-id">Telegram User ID *</label>
-            <input
-              type="text"
-              id="telegram-user-id"
-              value={telegramUserId}
-              onChange={(e) => setTelegramUserId(e.target.value)}
-              placeholder="e.g. 7744334263"
-              required
-            />
-            <small>Required for linking: when this user does /start in Telegram they&apos;ll see this tracking. Same as CSV: user_id,tracking_number</small>
-          </div>
-          <div className="form-group">
-            <label htmlFor="email-used">Email Used (optional)</label>
-            <input
-              type="email"
-              id="email-used"
-              value={emailUsed}
-              onChange={(e) => setEmailUsed(e.target.value)}
-              placeholder="e.g., user@example.com"
-            />
-            <small>Email address used when creating the InPost shipment</small>
           </div>
           <button type="submit" disabled={loading} className="submit-btn">
             {loading ? 'Adding...' : 'Add Tracking Number'}

@@ -76,7 +76,8 @@ export async function getAllTrackingNumbers(
   customTimestamp?: string,
   search?: string,
   unassignedOnly?: boolean,
-  kingBoxId?: number | null
+  kingBoxId?: number | null,
+  userId?: number | null
 ): Promise<{ 
   data: TrackingNumberWithBox[]; 
   total: number; 
@@ -129,6 +130,13 @@ export async function getAllTrackingNumbers(
   if (kingBoxId !== undefined && kingBoxId !== null) {
     conditions.push(`t.box_id IN (SELECT id FROM boxes WHERE parent_box_id = $${paramIndex})`);
     queryParams.push(kingBoxId);
+    paramIndex++;
+  }
+
+  // Filter by user: trackings linked to this user
+  if (userId !== undefined && userId !== null) {
+    conditions.push(`t.user_id = $${paramIndex}`);
+    queryParams.push(userId);
     paramIndex++;
   }
 

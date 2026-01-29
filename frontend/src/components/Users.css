@@ -131,6 +131,136 @@
   background: #7f8c8d;
 }
 
+.users-btn-trackings {
+  background: #9b59b6;
+  color: white;
+}
+
+.users-btn-trackings:hover {
+  background: #8e44ad;
+}
+
+/* Trackings modal */
+.users-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.users-modal {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  max-width: 480px;
+  width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.users-modal-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #ecf0f1;
+  position: relative;
+}
+
+.users-modal-header h3 {
+  margin: 0 2rem 0 0;
+  font-size: 1.25rem;
+  color: #2c3e50;
+}
+
+.users-modal-subtitle {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+  color: #7f8c8d;
+}
+
+.users-modal-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: #7f8c8d;
+  cursor: pointer;
+  padding: 0.25rem;
+}
+
+.users-modal-close:hover {
+  color: #2c3e50;
+}
+
+.users-modal-body {
+  padding: 1rem 1.25rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.users-modal-empty {
+  color: #7f8c8d;
+  font-style: italic;
+  margin: 0;
+}
+
+.users-modal-trackings-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.users-modal-tracking-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #f0f0f0;
+  gap: 1rem;
+}
+
+.users-modal-tracking-item:last-child {
+  border-bottom: none;
+}
+
+.users-modal-tracking-number {
+  font-family: monospace;
+  font-size: 0.95rem;
+}
+
+.users-modal-tracking-status {
+  font-size: 0.8rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  text-transform: capitalize;
+}
+
+.users-modal-tracking-status.status-not_scanned {
+  background: #fdecea;
+  color: #c0392b;
+}
+
+.users-modal-tracking-status.status-scanned {
+  background: #e8f5e9;
+  color: #27ae60;
+}
+
+.users-modal-tracking-status.status-delivered {
+  background: #e3f2fd;
+  color: #2980b9;
+}
+
+.users-modal-tracking-status.status-cancelled {
+  background: #f5f5f5;
+  color: #7f8c8d;
+}
+
 @media (max-width: 768px) {
   .users-container {
     padding: 1rem;

@@ -93,7 +93,7 @@ export const api = {
   deleteBox: (id: number) => axios.delete(`${API_URL}/tracking/boxes/${id}`),
 
   // Tracking Numbers
-  getTrackingNumbers: (boxId?: number, page?: number, limit?: number, status?: 'not_scanned' | 'scanned' | 'delivered' | 'cancelled', customTimestamp?: string, search?: string, unassignedOnly?: boolean, kingBoxId?: number | null) => {
+  getTrackingNumbers: (boxId?: number, page?: number, limit?: number, status?: 'not_scanned' | 'scanned' | 'delivered' | 'cancelled', customTimestamp?: string, search?: string, unassignedOnly?: boolean, kingBoxId?: number | null, userId?: number | null) => {
     const params: any = {};
     if (boxId) params.boxId = boxId;
     if (page) params.page = page;
@@ -103,6 +103,7 @@ export const api = {
     if (search) params.search = search;
     if (unassignedOnly) params.unassignedOnly = 'true';
     if (kingBoxId !== undefined && kingBoxId !== null) params.kingBoxId = kingBoxId;
+    if (userId !== undefined && userId !== null) params.userId = userId;
     return axios.get<{ 
       data: TrackingNumber[]; 
       total: number; 
