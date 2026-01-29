@@ -468,6 +468,8 @@ export default function Dashboard() {
               </th>
               <th>Status</th>
               <th>Status Details</th>
+              <th>Pickup Code</th>
+              <th>Location</th>
               <th>Tracking Number</th>
               <th>Box</th>
               <th>TrackingMore Status</th>
@@ -480,7 +482,7 @@ export default function Dashboard() {
           <tbody>
             {trackingNumbers.length === 0 ? (
               <tr>
-                <td colSpan={10} className="empty-state">
+                <td colSpan={12} className="empty-state">
                   No tracking numbers found
                 </td>
               </tr>
@@ -613,6 +615,22 @@ export default function Dashboard() {
                     </span>
                   </td>
                   <td className="status-details">{tn.status_details || '-'}</td>
+                  <td className="pickup-code" style={{ 
+                    fontWeight: tn.pickup_code ? 'bold' : 'normal',
+                    color: tn.pickup_code ? '#27ae60' : '#999',
+                    fontSize: tn.pickup_code ? '1.1rem' : '0.9rem'
+                  }}>
+                    {tn.pickup_code || '-'}
+                  </td>
+                  <td className="locker-location" style={{
+                    fontSize: '0.85rem',
+                    maxWidth: '200px',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }} title={tn.locker_id || undefined}>
+                    {tn.locker_id || '-'}
+                  </td>
                   <td className="tracking-number">
                     <span 
                       style={{ cursor: 'pointer', textDecoration: 'underline', color: '#3498db' }}
