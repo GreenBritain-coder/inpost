@@ -13,6 +13,7 @@ export default function Users() {
   const [trackingsModalUser, setTrackingsModalUser] = useState<UserSummary | null>(null);
   const [trackingsModalList, setTrackingsModalList] = useState<TrackingNumber[]>([]);
   const [trackingsModalLoading, setTrackingsModalLoading] = useState(false);
+  const [fetchingUsernameId, setFetchingUsernameId] = useState<number | null>(null);
 
   useEffect(() => {
     loadUsers();
@@ -78,6 +79,24 @@ export default function Users() {
   const closeTrackingsModal = () => {
     setTrackingsModalUser(null);
     setTrackingsModalList([]);
+  };
+
+  const fetchTelegramUsername = async (u: UserSummary) => {
+    if (!u.telegram_user_id?.trim()) return;
+    try {
+      setFetchingUsernameId(u.id);
+      setError('');
+      const res = await api.fetchTelegramUsername(u.id);
+      if (res.data.username != null) {
+        await loadUsers();
+      } else {
+        setError('Username not found (user may not have started the bot).');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to fetch username from Telegram');
+    } finally {
+      setFetchingUsernameId(null);
+    }
   };
 
   if (loading) {
@@ -159,9 +178,22 @@ export default function Users() {
                 </td>
                 <td>
                   {editingId !== u.id && (
-                    <button type="button" onClick={() => openTrackingsModal(u)} className="users-btn users-btn-trackings" title="View linked tracking numbers">
-                      View trackings
-                    </button>
+                    <>
+                      {u.telegram_user_id?.trim() && (
+                        <button
+                          type="button"
+                          onClick={() => fetchTelegramUsername(u)}
+                          disabled={fetchingUsernameId === u.id}
+                          className="users-btn users-btn-fetch-username"
+                          title="Get @username from Telegram using their user ID (user must have started the bot)"
+                        >
+                          {fetchingUsernameId === u.id ? 'Fetching…' : 'Fetch username'}
+                        </button>
+                      )}
+                      <button type="button" onClick={() => openTrackingsModal(u)} className="users-btn users-btn-trackings" title="View linked tracking numbers">
+                        View trackings
+                      </button>
+                    </>
                   )}
                 </td>
               </tr>

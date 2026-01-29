@@ -96,6 +96,40 @@ export async function sendSendCodeToTelegram(
 }
 
 /**
+ * Get Telegram username from Telegram user ID via getChatMember.
+ * For a private chat with a user, chat_id equals the user's id, so we use that.
+ * Returns @username or null if not available or user hasn't started the bot.
+ */
+export async function getTelegramUsernameByUserId(
+  telegramUserId: string | number | bigint
+): Promise<string | null> {
+  if (!TELEGRAM_BOT_TOKEN) {
+    console.error('[Telegram] Bot token not configured');
+    return null;
+  }
+
+  const uid = typeof telegramUserId === 'bigint' ? telegramUserId.toString() : String(telegramUserId);
+  try {
+    const response = await axios.post(`${TELEGRAM_API_URL}/getChatMember`, {
+      chat_id: uid,
+      user_id: Number(uid) || uid,
+    });
+    if (response.data?.ok && response.data?.result?.user?.username) {
+      const username = response.data.result.user.username;
+      return username.startsWith('@') ? username : `@${username}`;
+    }
+    return null;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      console.error('[Telegram] getChatMember error:', error.response?.data || error.message);
+    } else {
+      console.error('[Telegram] getChatMember error:', error);
+    }
+    return null;
+  }
+}
+
+/**
  * Send error notification to admin (optional)
  */
 export async function sendAdminNotification(message: string): Promise<void> {

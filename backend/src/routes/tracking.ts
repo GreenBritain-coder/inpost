@@ -17,6 +17,7 @@ import {
 } from '../models/tracking';
 import { createBox, getAllBoxes, getBoxById, updateBox, deleteBox, getKingBoxes } from '../models/box';
 import { getAllUsers, getUserById, updateUserTelegramIdentity } from '../models/user';
+import { getTelegramUsernameByUserId } from '../services/telegramService';
 import { getStatusHistory, getRecentStatusChanges, getRecentScannedChanges } from '../models/statusHistory';
 import { updateAllTrackingStatuses, cleanupOldTrackingData } from '../services/scheduler';
 import { checkInPostStatus } from '../services/scraper';
@@ -899,6 +900,37 @@ router.patch(
     }
   }
 );
+
+// Fetch Telegram username from Telegram API using user's telegram_user_id (getChatMember).
+// Only works if the user has started the bot (private chat exists). Optionally saves to user.
+router.post('/users/:id/fetch-telegram-username', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    if (isNaN(userId)) {
+      return res.status(400).json({ error: 'Invalid user ID' });
+    }
+    const user = await getUserById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const telegramUserId = user.telegram_user_id;
+    if (telegramUserId == null || String(telegramUserId).trim() === '') {
+      return res.status(400).json({ error: 'User has no Telegram user ID set' });
+    }
+    const username = await getTelegramUsernameByUserId(telegramUserId);
+    if (username != null) {
+      await updateUserTelegramIdentity(userId, username, telegramUserId);
+    }
+    const updatedUser = await getUserById(userId);
+    return res.json({
+      username: username ?? updatedUser?.telegram_username ?? null,
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.error('Error fetching Telegram username:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // Logs endpoints
 router.get('/logs/status-changes', async (req: AuthRequest, res: Response) => {

@@ -140,6 +140,16 @@
   background: #8e44ad;
 }
 
+.users-btn-fetch-username {
+  background: #16a085;
+  color: white;
+  margin-right: 0.5rem;
+}
+
+.users-btn-fetch-username:hover:not(:disabled) {
+  background: #1abc9c;
+}
+
 /* Trackings modal */
 .users-modal-overlay {
   position: fixed;

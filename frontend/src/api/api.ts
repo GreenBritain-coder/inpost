@@ -229,6 +229,9 @@ export const api = {
     data: { telegram_user_id?: string | null; telegram_username?: string | null }
   ) =>
     axios.patch<UserSummary>(`${API_URL}/tracking/users/${userId}/telegram`, data),
+  /** Fetch Telegram username from Telegram API using user's telegram_user_id (getChatMember); optionally saves to user. */
+  fetchTelegramUsername: (userId: number) =>
+    axios.post<{ username: string | null; user: UserSummary }>(`${API_URL}/tracking/users/${userId}/fetch-telegram-username`),
 };
 
 export interface UserSummary {
